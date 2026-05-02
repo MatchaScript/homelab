@@ -1,0 +1,43 @@
+name: "Setup Podman"
+description: "Install newer Podman + Buildah (5.x) on Ubuntu noble runners by pulling from a later Ubuntu release archive."
+
+inputs:
+  codename:
+    description: "Ubuntu release codename to pull podman/crun from (e.g. plucky, questing, resolute)."
+    required: false
+    default: "plucky"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Add Ubuntu ${{ inputs.codename }} apt source and install podman
+      shell: bash
+      env:
+        CODENAME: ${{ inputs.codename }}
+      run: |
+        set -euo pipefail
+
+        ARCH=$(dpkg --print-architecture)
+        case "$ARCH" in
+          amd64|i386) MIRROR="http://archive.ubuntu.com/ubuntu/" ;;
+          *)          MIRROR="http://ports.ubuntu.com/ubuntu-ports/" ;;
+        esac
+
+        echo "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] ${MIRROR} ${CODENAME} main universe" \
+          | sudo tee "/etc/apt/sources.list.d/${CODENAME}.list"
+
+        sudo tee "/etc/apt/preferences.d/99-${CODENAME}-podman" > /dev/null <<EOF
+        Package: *
+        Pin: release n=${CODENAME}
+        Pin-Priority: 100
+
+        Package: podman buildah crun conmon golang-github-containers-common netavark aardvark-dns
+        Pin: release n=${CODENAME}
+        Pin-Priority: 990
+        EOF
+
+        sudo apt-get update
+        sudo apt-get install -y -t "${CODENAME}" podman buildah crun
+
+        podman version
+        buildah version

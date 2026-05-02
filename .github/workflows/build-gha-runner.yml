@@ -94,31 +94,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install newer podman (from Debian trixie)
-        run: |
-          sudo apt-get install -y debian-archive-keyring
-          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
-          sudo apt-get update
-          sudo apt-get install -y crun/trixie podman/trixie
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
 
       - name: Generate Tags
         id: tags
-        env:
-          REGISTRY: ${{ needs.prepare.outputs.registry }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE: ${{ env.SLIM_IMAGE }}
-          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
-          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
-          if [ "$BRANCH_NAME" = "main" ]; then
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${ARCH},${IMAGE_PREFIX}:latest-${ARCH}"
-          else
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${BRANCH_NAME}-${ARCH}"
-          fi
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
-          echo "Generated tags: $TAGS"
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.SLIM_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          arches: ${{ matrix.arch }}
 
       - name: Build slim image (podman)
         run: |
@@ -172,42 +158,39 @@ jobs:
     needs: [prepare, build-slim]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - name: Install newer podman (from Debian trixie)
-        run: |
-          sudo apt-get install -y debian-archive-keyring
-          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
-          sudo apt-get update
-          sudo apt-get install -y crun/trixie podman/trixie
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
 
       - name: Login to registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
 
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.SLIM_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          arches: "-"
+
       - name: Create and push multi-arch manifest
         env:
-          REGISTRY: ${{ needs.prepare.outputs.registry }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE: ${{ env.SLIM_IMAGE }}
-          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
-          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          IMAGE_PREFIX: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.SLIM_IMAGE }}
+          PRIMARY_KEY: ${{ steps.tags.outputs.primary_key }}
+          TAGS: ${{ steps.tags.outputs.tags }}
         run: |
-          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
-          if [ "$BRANCH_NAME" = "main" ]; then
-            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-amd64"
-            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-arm64"
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG} ${IMAGE_PREFIX}:latest"
-          else
-            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-amd64"
-            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-arm64"
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME} ${IMAGE_PREFIX}:${BRANCH_NAME}"
-          fi
+          AMD64_IMAGE="${IMAGE_PREFIX}:${PRIMARY_KEY}-amd64"
+          ARM64_IMAGE="${IMAGE_PREFIX}:${PRIMARY_KEY}-arm64"
 
           echo "Creating multi-arch manifest from: ${AMD64_IMAGE}, ${ARM64_IMAGE}"
           sudo podman manifest create slim-manifest
           sudo podman manifest add slim-manifest "docker://${AMD64_IMAGE}"
           sudo podman manifest add slim-manifest "docker://${ARM64_IMAGE}"
 
-          for tag in ${TAGS}; do
+          for tag in $(echo "${TAGS}" | tr ',' ' '); do
             echo "Pushing manifest as: ${tag}"
             sudo podman manifest push slim-manifest "docker://${tag}"
           done
@@ -234,33 +217,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install newer podman (from Debian trixie)
-        run: |
-          sudo apt-get install -y debian-archive-keyring
-          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
-          sudo apt-get update
-          sudo apt-get install -y crun/trixie podman/trixie
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
 
       - name: Generate Tags
         id: tags
-        env:
-          REGISTRY: ${{ needs.prepare.outputs.registry }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE: ${{ env.DEFAULT_IMAGE }}
-          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
-          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
-          if [ "$BRANCH_NAME" = "main" ]; then
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${ARCH},${IMAGE_PREFIX}:latest-${ARCH}"
-            SLIM_BASE_TAG="latest-${ARCH}"
-          else
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${BRANCH_NAME}-${ARCH}"
-            SLIM_BASE_TAG="${BRANCH_NAME}-${ARCH}"
-          fi
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
-          echo "slim_base_tag=$SLIM_BASE_TAG" >> $GITHUB_OUTPUT
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DEFAULT_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          arches: ${{ matrix.arch }}
 
       - name: Login to registry
         run: |
@@ -271,8 +238,14 @@ jobs:
           REGISTRY: ${{ needs.prepare.outputs.registry }}
           NAMESPACE: ${{ env.NAMESPACE }}
           SLIM_IMAGE: ${{ env.SLIM_IMAGE }}
-          SLIM_BASE_TAG: ${{ steps.tags.outputs.slim_base_tag }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          ARCH: ${{ matrix.arch }}
         run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            SLIM_BASE_TAG="latest-${ARCH}"
+          else
+            SLIM_BASE_TAG="${BRANCH_NAME}-${ARCH}"
+          fi
           BASE_IMAGE="${REGISTRY}/${NAMESPACE}/${SLIM_IMAGE}:${SLIM_BASE_TAG}"
           echo "Using BASE_IMAGE=${BASE_IMAGE}"
           sudo podman build \
@@ -317,42 +290,39 @@ jobs:
     needs: [prepare, build-default]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - name: Install newer podman (from Debian trixie)
-        run: |
-          sudo apt-get install -y debian-archive-keyring
-          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
-          sudo apt-get update
-          sudo apt-get install -y crun/trixie podman/trixie
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
 
       - name: Login to registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
 
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DEFAULT_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          arches: "-"
+
       - name: Create and push multi-arch manifest
         env:
-          REGISTRY: ${{ needs.prepare.outputs.registry }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE: ${{ env.DEFAULT_IMAGE }}
-          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
-          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          IMAGE_PREFIX: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DEFAULT_IMAGE }}
+          PRIMARY_KEY: ${{ steps.tags.outputs.primary_key }}
+          TAGS: ${{ steps.tags.outputs.tags }}
         run: |
-          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
-          if [ "$BRANCH_NAME" = "main" ]; then
-            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-amd64"
-            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-arm64"
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG} ${IMAGE_PREFIX}:latest"
-          else
-            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-amd64"
-            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-arm64"
-            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME} ${IMAGE_PREFIX}:${BRANCH_NAME}"
-          fi
+          AMD64_IMAGE="${IMAGE_PREFIX}:${PRIMARY_KEY}-amd64"
+          ARM64_IMAGE="${IMAGE_PREFIX}:${PRIMARY_KEY}-arm64"
 
           echo "Creating multi-arch manifest from: ${AMD64_IMAGE}, ${ARM64_IMAGE}"
           sudo podman manifest create default-manifest
           sudo podman manifest add default-manifest "docker://${AMD64_IMAGE}"
           sudo podman manifest add default-manifest "docker://${ARM64_IMAGE}"
 
-          for tag in ${TAGS}; do
+          for tag in $(echo "${TAGS}" | tr ',' ' '); do
             echo "Pushing manifest as: ${tag}"
             sudo podman manifest push default-manifest "docker://${tag}"
           done

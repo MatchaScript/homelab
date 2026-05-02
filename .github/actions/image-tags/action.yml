@@ -1,0 +1,90 @@
+name: "Generate Image Tags"
+description: "Compute OCI image tags for build / manifest steps. Supports version, branch, variant and arch suffix combinations."
+
+inputs:
+  image_prefix:
+    description: "Full image prefix without tag (e.g. ghcr.io/foo/bar)."
+    required: true
+  branch:
+    description: "Sanitized git branch name. 'main' enables 'latest' / version-only aliases."
+    required: true
+  date:
+    description: "Date tag (e.g. YYYYMMDD)."
+    required: true
+  version:
+    description: "Optional version key (e.g. fedora VERSION_ID). Empty disables version-prefixed tags."
+    required: false
+    default: ""
+  variant:
+    description: "Optional image variant suffix inserted before arch (e.g. hyperv)."
+    required: false
+    default: ""
+  arches:
+    description: "Space-separated list of arch suffixes. Use '-' as a token to also emit alias tags without an arch suffix. Examples: 'amd64', 'amd64 -', '-' (alias-only / manifest mode)."
+    required: true
+
+outputs:
+  tags:
+    description: "Comma-separated full image references."
+    value: ${{ steps.gen.outputs.tags }}
+  primary_key:
+    description: "Unique versioned tag key (without prefix). Use as ${image_prefix}:${primary_key}-{arch} when collecting per-arch images for a manifest."
+    value: ${{ steps.gen.outputs.primary_key }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Compute tags
+      id: gen
+      shell: bash
+      env:
+        IMAGE_PREFIX: ${{ inputs.image_prefix }}
+        BRANCH_NAME: ${{ inputs.branch }}
+        DATE_TAG: ${{ inputs.date }}
+        VERSION_ID: ${{ inputs.version }}
+        VARIANT: ${{ inputs.variant }}
+        ARCHES: ${{ inputs.arches }}
+      run: |
+        set -euo pipefail
+
+        if [ -n "$VERSION_ID" ]; then
+          PRIMARY_KEY="${VERSION_ID}.${DATE_TAG}"
+        else
+          PRIMARY_KEY="${DATE_TAG}"
+        fi
+
+        KEYS=("$PRIMARY_KEY")
+        if [ "$BRANCH_NAME" = "main" ]; then
+          if [ -n "$VERSION_ID" ]; then
+            KEYS+=("${VERSION_ID}")
+          fi
+          KEYS+=("latest")
+        else
+          PRIMARY_KEY="${PRIMARY_KEY}-${BRANCH_NAME}"
+          KEYS=("$PRIMARY_KEY" "${BRANCH_NAME}")
+          if [ -n "$VERSION_ID" ]; then
+            KEYS+=("${VERSION_ID}-${BRANCH_NAME}")
+          fi
+        fi
+
+        TAGS=()
+        for arch in $ARCHES; do
+          for key in "${KEYS[@]}"; do
+            suffix=""
+            if [ -n "$VARIANT" ]; then
+              suffix="${suffix}-${VARIANT}"
+            fi
+            if [ "$arch" != "-" ]; then
+              suffix="${suffix}-${arch}"
+            fi
+            TAGS+=("${IMAGE_PREFIX}:${key}${suffix}")
+          done
+        done
+
+        IFS=,
+        echo "tags=${TAGS[*]}" >> "$GITHUB_OUTPUT"
+        echo "primary_key=${PRIMARY_KEY}" >> "$GITHUB_OUTPUT"
+
+        echo "primary_key: ${PRIMARY_KEY}"
+        echo "tags:"
+        printf '  %s\n' "${TAGS[@]}"

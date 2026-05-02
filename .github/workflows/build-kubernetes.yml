@@ -1,0 +1,396 @@
+name: Build Kubernetes bootc images
+
+on:
+  schedule:
+    # 毎週日曜日 午前2時(UTC) = 11時(JST)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      kubernetes_version:
+        description: "Kubernetes minor version channel (e.g. v1.35)"
+        required: false
+        default: "v1.35"
+        type: string
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  IMAGE: kubernetes
+  SYSBASE_AMD64: "ghcr.io/matchascript/fedora-bootc:latest"
+  SYSBASE_ASAHI: "ghcr.io/matchascript/asahi-bootc:latest"
+  KUBERNETES_VERSION_DEFAULT: "v1.35"
+  CONTEXT_DIR: ./containers
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-24.04
+    outputs:
+      current_date: ${{ steps.set_date.outputs.current_date }}
+      version_id: ${{ steps.get_version.outputs.version_id }}
+      kubernetes_version: ${{ steps.set_k8s.outputs.kubernetes_version }}
+      branch_name: ${{ steps.set_branch.outputs.branch_name }}
+      registry: ${{ steps.set_registry.outputs.registry }}
+      can_push: ${{ steps.set_push.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Set current date
+        id: set_date
+        env:
+          TZ: "Asia/Tokyo"
+        run: echo "current_date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Get VERSION_ID from fedora-bootc base
+        id: get_version
+        run: |
+          VERSION_ID=$(sudo podman run --rm ${{ env.SYSBASE_AMD64 }} cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID=$(sudo podman inspect ${{ env.SYSBASE_AMD64 }} --format='{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "rawhide")
+          fi
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "<no value>" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID="rawhide"
+          fi
+
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+          echo "Detected VERSION_ID: $VERSION_ID"
+
+      - name: Set Kubernetes version
+        id: set_k8s
+        run: |
+          K8S_VERSION="${{ inputs.kubernetes_version || env.KUBERNETES_VERSION_DEFAULT }}"
+          echo "kubernetes_version=$K8S_VERSION" >> $GITHUB_OUTPUT
+          echo "Kubernetes channel: $K8S_VERSION"
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//\//-}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Current branch: $BRANCH_NAME"
+
+      - name: Set registry
+        id: set_registry
+        run: |
+          REGISTRY="${{ inputs.target_registry || env.REGISTRY }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Set push permission
+        id: set_push
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "devel" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build amd64 base
+  # ════════════════════════════════════════════════════
+  build-amd64-base:
+    name: Build kubernetes (amd64 base)
+    runs-on: ubuntu-24.04
+    needs: prepare
+    outputs:
+      kubelet_version: ${{ steps.detect_kubelet.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Build kubernetes amd64 base (buildah)
+        env:
+          KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
+        run: |
+          sudo buildah build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg SYSBASE=${{ env.SYSBASE_AMD64 }} \
+            --build-arg TARGETARCH=amd64 \
+            --build-arg KUBERNETES_VERSION="${KUBERNETES_VERSION}" \
+            --build-arg KUBEADM_VERSION="${KUBERNETES_VERSION}" \
+            --tag temp-k8s-amd64 \
+            -f ${{ env.CONTEXT_DIR }}/bootc/kubernetes/base.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Rechunk amd64 base
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-k8s-amd64:latest localhost/rechunked-temp-k8s-amd64:latest
+          sudo podman tag localhost/rechunked-temp-k8s-amd64:latest localhost/temp-k8s-amd64:latest
+          sudo podman rmi localhost/rechunked-temp-k8s-amd64:latest
+
+      - name: Detect kubelet version
+        id: detect_kubelet
+        run: |
+          KUBELET_VERSION=$(sudo podman run --rm --entrypoint /usr/bin/rpm localhost/temp-k8s-amd64:latest -q --queryformat '%{VERSION}' kubelet)
+          if [ -z "$KUBELET_VERSION" ]; then
+            echo "Failed to detect kubelet version" >&2
+            exit 1
+          fi
+          echo "version=$KUBELET_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected kubelet version: $KUBELET_VERSION"
+
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: "${{ steps.detect_kubelet.outputs.version }}-${{ needs.prepare.outputs.version_id }}"
+          arches: amd64
+
+      - name: Login to registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Tag and push
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-k8s-amd64 "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ════════════════════════════════════════════════════
+  #  Build Intel variant (amd64)
+  # ════════════════════════════════════════════════════
+  build-intel:
+    name: Build kubernetes (intel)
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-amd64-base]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Resolve amd64 base ref
+        id: amd64_base
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          KUBELET_VERSION: ${{ needs.build-amd64-base.outputs.kubelet_version }}
+        run: |
+          PRIMARY="${KUBELET_VERSION}-${VERSION_ID}.${DATE_TAG}"
+          if [ "$BRANCH_NAME" != "main" ]; then
+            PRIMARY="${PRIMARY}-${BRANCH_NAME}"
+          fi
+          echo "ref=${REGISTRY}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${PRIMARY}-amd64" >> $GITHUB_OUTPUT
+
+      - name: Build kubernetes intel (buildah)
+        run: |
+          sudo buildah build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg AMD64_BASE=${{ steps.amd64_base.outputs.ref }} \
+            --tag temp-k8s-intel \
+            -f ${{ env.CONTEXT_DIR }}/bootc/extensions/intel.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: "${{ needs.build-amd64-base.outputs.kubelet_version }}-${{ needs.prepare.outputs.version_id }}"
+          variant: intel
+          arches: "amd64 -"
+
+      - name: Tag and push
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-k8s-intel "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ════════════════════════════════════════════════════
+  #  Build Ryzen variant (amd64)
+  # ════════════════════════════════════════════════════
+  build-ryzen:
+    name: Build kubernetes (ryzen)
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-amd64-base]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Resolve amd64 base ref
+        id: amd64_base
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          KUBELET_VERSION: ${{ needs.build-amd64-base.outputs.kubelet_version }}
+        run: |
+          PRIMARY="${KUBELET_VERSION}-${VERSION_ID}.${DATE_TAG}"
+          if [ "$BRANCH_NAME" != "main" ]; then
+            PRIMARY="${PRIMARY}-${BRANCH_NAME}"
+          fi
+          echo "ref=${REGISTRY}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${PRIMARY}-amd64" >> $GITHUB_OUTPUT
+
+      - name: Build kubernetes ryzen (buildah)
+        run: |
+          sudo buildah build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg AMD64_BASE=${{ steps.amd64_base.outputs.ref }} \
+            --tag temp-k8s-ryzen \
+            -f ${{ env.CONTEXT_DIR }}/bootc/extensions/ryzen.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: "${{ needs.build-amd64-base.outputs.kubelet_version }}-${{ needs.prepare.outputs.version_id }}"
+          variant: ryzen
+          arches: "amd64 -"
+
+      - name: Tag and push
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-k8s-ryzen "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ════════════════════════════════════════════════════
+  #  Build Asahi variant (arm64)
+  # ════════════════════════════════════════════════════
+  build-asahi:
+    name: Build kubernetes (asahi)
+    runs-on: ubuntu-24.04-arm
+    needs: prepare
+    outputs:
+      kubelet_version: ${{ steps.detect_kubelet.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Build kubernetes asahi (buildah)
+        env:
+          KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
+        run: |
+          sudo buildah build \
+            --platform linux/arm64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg SYSBASE=${{ env.SYSBASE_ASAHI }} \
+            --build-arg TARGETARCH=arm64 \
+            --build-arg KUBERNETES_VERSION="${KUBERNETES_VERSION}" \
+            --build-arg KUBEADM_VERSION="${KUBERNETES_VERSION}" \
+            --tag temp-k8s-asahi \
+            -f ${{ env.CONTEXT_DIR }}/bootc/kubernetes/base.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Rechunk asahi
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-k8s-asahi:latest localhost/rechunked-temp-k8s-asahi:latest
+          sudo podman tag localhost/rechunked-temp-k8s-asahi:latest localhost/temp-k8s-asahi:latest
+          sudo podman rmi localhost/rechunked-temp-k8s-asahi:latest
+
+      - name: Detect kubelet version
+        id: detect_kubelet
+        run: |
+          KUBELET_VERSION=$(sudo podman run --rm --entrypoint /usr/bin/rpm localhost/temp-k8s-asahi:latest -q --queryformat '%{VERSION}' kubelet)
+          if [ -z "$KUBELET_VERSION" ]; then
+            echo "Failed to detect kubelet version" >&2
+            exit 1
+          fi
+          echo "version=$KUBELET_VERSION" >> $GITHUB_OUTPUT
+          echo "Detected kubelet version: $KUBELET_VERSION"
+
+      - name: Generate Tags
+        id: tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: "${{ steps.detect_kubelet.outputs.version }}-${{ needs.prepare.outputs.version_id }}"
+          variant: asahi
+          arches: "arm64 -"
+
+      - name: Login to registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Tag and push
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-k8s-asahi "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
