@@ -24,7 +24,10 @@ permissions:
 env:
   REGISTRY: ghcr.io
   NAMESPACE: matchascript
+  SLIM_IMAGE: gha-runner-slim
+  DEFAULT_IMAGE: gha-runner
   FEDORA_BASE: "ghcr.io/matchascript/fedora:latest"
+  CONTEXT_DIR: ./containers
 
 jobs:
   # ════════════════════════════════════════════════════
@@ -91,105 +94,125 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Podman
-        uses: redhat-actions/podman-install@main
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
 
       - name: Generate Tags
         id: tags
         env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.SLIM_IMAGE }}
           DATE_TAG: ${{ needs.prepare.outputs.current_date }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           ARCH: ${{ matrix.arch }}
         run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
           if [ "$BRANCH_NAME" = "main" ]; then
-            TAGS="${DATE_TAG}-${ARCH} latest-${ARCH}"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${ARCH},${IMAGE_PREFIX}:latest-${ARCH}"
           else
-            TAGS="${DATE_TAG}-${BRANCH_NAME}-${ARCH} ${BRANCH_NAME}-${ARCH}"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${BRANCH_NAME}-${ARCH}"
           fi
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Generated tags: $TAGS"
 
-      - name: Build Image
-        id: build_image
-        uses: redhat-actions/buildah-build@v2
-        with:
-          context: ./containers
-          containerfiles: ./containers/gha-runner/base.Containerfile
-          image: ${{ env.NAMESPACE }}/gha-runner-slim
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: |
-            BASE_IMAGE=${{ env.FEDORA_BASE }}
-            TARGETARCH=${{ matrix.arch }}
-
-      - name: Test Image
+      - name: Build slim image (podman)
         run: |
-          TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d' ' -f1)
-          IMAGE="localhost/${{ steps.build_image.outputs.image }}:${TAG}"
+          sudo podman build \
+            --platform linux/${{ matrix.arch }} \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg BASE_IMAGE=${{ env.FEDORA_BASE }} \
+            --build-arg TARGETARCH=${{ matrix.arch }} \
+            --tag temp-slim-${{ matrix.arch }} \
+            -f ${{ env.CONTEXT_DIR }}/gha-runner/base.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Test image
+        run: |
+          IMAGE="localhost/temp-slim-${{ matrix.arch }}"
           echo "Testing image: ${IMAGE}"
-          CONTAINER=$(buildah from "${IMAGE}")
-          trap "buildah rm ${CONTAINER}" EXIT
+          sudo podman run --rm --entrypoint /bin/sh "${IMAGE}" -c '
+            set -e
+            test -x /home/runner/run.sh
+            node --version
+            git --version
+            jq --version
+            curl --version
+            uv --version
+            skopeo --version
+            id | grep -q "uid=1001"
+            id | grep -q "docker"
+            grep runner /etc/subuid | wc -l | grep -q 2
+          '
 
-          # Runner entrypoint
-          buildah run "${CONTAINER}" test -x /home/runner/run.sh
-
-          # Core tools
-          buildah run "${CONTAINER}" node --version
-          buildah run "${CONTAINER}" git --version
-          buildah run "${CONTAINER}" jq --version
-          buildah run "${CONTAINER}" curl --version
-          buildah run "${CONTAINER}" uv --version
-          buildah run "${CONTAINER}" skopeo --version
-
-          # Runner user and permissions
-          buildah run "${CONTAINER}" id | grep -q "uid=1001"
-          buildah run "${CONTAINER}" id | grep -q "docker"
-          buildah run "${CONTAINER}" sh -c "grep runner /etc/subuid | wc -l | grep -q 2"
-
-      - name: Push to Registry
+      - name: Login to registry
         if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build_image.outputs.image }}
-          tags: ${{ steps.build_image.outputs.tags }}
-          registry: ${{ needs.prepare.outputs.registry }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
 
-  # ── Slim Manifest ─────────────────────────────────────
+      - name: Tag and push
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-slim-${{ matrix.arch }} "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ── Slim multi-arch manifest ──────────────────────────
   manifest-slim:
     name: Create Slim Manifest
     runs-on: ubuntu-24.04
     needs: [prepare, build-slim]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
-    env:
-      REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
-      - name: Install Podman
-        uses: redhat-actions/podman-install@main
-
-      - name: Login to Registry
+      - name: Install newer podman (from Debian trixie)
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
 
-      - name: Create and Push Manifest Lists
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Create and push multi-arch manifest
         env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.SLIM_IMAGE }}
           DATE_TAG: ${{ needs.prepare.outputs.current_date }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
         run: |
-          IMAGE="${REGISTRY}/${NAMESPACE}/gha-runner-slim"
-
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
           if [ "$BRANCH_NAME" = "main" ]; then
-            MANIFEST_TAGS="${DATE_TAG} latest"
+            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-arm64"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG} ${IMAGE_PREFIX}:latest"
           else
-            MANIFEST_TAGS="${DATE_TAG}-${BRANCH_NAME} ${BRANCH_NAME}"
+            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-arm64"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME} ${IMAGE_PREFIX}:${BRANCH_NAME}"
           fi
 
-          for TAG in $MANIFEST_TAGS; do
-            echo "==> Creating manifest: ${IMAGE}:${TAG}"
-            buildah manifest create "${IMAGE}:${TAG}" \
-              "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
-            buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+          echo "Creating multi-arch manifest from: ${AMD64_IMAGE}, ${ARM64_IMAGE}"
+          sudo podman manifest create slim-manifest
+          sudo podman manifest add slim-manifest "docker://${AMD64_IMAGE}"
+          sudo podman manifest add slim-manifest "docker://${ARM64_IMAGE}"
+
+          for tag in ${TAGS}; do
+            echo "Pushing manifest as: ${tag}"
+            sudo podman manifest push slim-manifest "docker://${tag}"
           done
+
+          sudo podman manifest rm slim-manifest
 
   # ════════════════════════════════════════════════════
   #  Build Default — amd64 / arm64
@@ -197,7 +220,7 @@ jobs:
   build-default:
     name: Build Runner Default (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    needs: [prepare, build-slim]
+    needs: [prepare, manifest-slim]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     strategy:
       fail-fast: false
@@ -208,108 +231,130 @@ jobs:
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
-    env:
-      REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Podman
-        uses: redhat-actions/podman-install@main
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
 
       - name: Generate Tags
         id: tags
         env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.DEFAULT_IMAGE }}
           DATE_TAG: ${{ needs.prepare.outputs.current_date }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           ARCH: ${{ matrix.arch }}
         run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
           if [ "$BRANCH_NAME" = "main" ]; then
-            TAGS="${DATE_TAG}-${ARCH} latest-${ARCH}"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${ARCH},${IMAGE_PREFIX}:latest-${ARCH}"
             SLIM_BASE_TAG="latest-${ARCH}"
           else
-            TAGS="${DATE_TAG}-${BRANCH_NAME}-${ARCH} ${BRANCH_NAME}-${ARCH}"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${BRANCH_NAME}-${ARCH}"
             SLIM_BASE_TAG="${BRANCH_NAME}-${ARCH}"
           fi
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "slim_base_tag=$SLIM_BASE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Login to Registry
+      - name: Login to registry
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
 
-      - name: Build Image
-        id: build_image
-        uses: redhat-actions/buildah-build@v2
-        with:
-          context: ./containers
-          containerfiles: ./containers/gha-runner/default.Containerfile
-          image: ${{ env.NAMESPACE }}/gha-runner
-          tags: ${{ steps.tags.outputs.tags }}
-          build-args: |
-            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/gha-runner-slim:${{ steps.tags.outputs.slim_base_tag }}
-
-      - name: Test Image
+      - name: Build default image (podman)
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          SLIM_IMAGE: ${{ env.SLIM_IMAGE }}
+          SLIM_BASE_TAG: ${{ steps.tags.outputs.slim_base_tag }}
         run: |
-          TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d' ' -f1)
-          IMAGE="localhost/${{ steps.build_image.outputs.image }}:${TAG}"
+          BASE_IMAGE="${REGISTRY}/${NAMESPACE}/${SLIM_IMAGE}:${SLIM_BASE_TAG}"
+          echo "Using BASE_IMAGE=${BASE_IMAGE}"
+          sudo podman build \
+            --platform linux/${{ matrix.arch }} \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+            --tag temp-default-${{ matrix.arch }} \
+            -f ${{ env.CONTEXT_DIR }}/gha-runner/default.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Test image
+        run: |
+          IMAGE="localhost/temp-default-${{ matrix.arch }}"
           echo "Testing image: ${IMAGE}"
-          CONTAINER=$(buildah from "${IMAGE}")
-          trap "buildah rm ${CONTAINER}" EXIT
+          sudo podman run --rm --entrypoint /bin/sh "${IMAGE}" -c '
+            set -e
+            gcc --version
+            g++ --version
+            cmake --version
+            make --version
+            python3 --version
+            shellcheck --version
+            yamllint --version
+            rsync --version
+            ssh -V
+          '
 
-          # Build tools
-          buildah run "${CONTAINER}" gcc --version
-          buildah run "${CONTAINER}" g++ --version
-          buildah run "${CONTAINER}" cmake --version
-          buildah run "${CONTAINER}" make --version
-          buildah run "${CONTAINER}" python3 --version
+      - name: Tag and push
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-default-${{ matrix.arch }} "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
 
-          # Utility tools
-          buildah run "${CONTAINER}" shellcheck --version
-          buildah run "${CONTAINER}" yamllint --version
-          buildah run "${CONTAINER}" rsync --version
-          buildah run "${CONTAINER}" ssh -V
-
-      - name: Push to Registry
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build_image.outputs.image }}
-          tags: ${{ steps.build_image.outputs.tags }}
-          registry: ${{ needs.prepare.outputs.registry }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Default Manifest ──────────────────────────────────
+  # ── Default multi-arch manifest ───────────────────────
   manifest-default:
     name: Create Default Manifest
     runs-on: ubuntu-24.04
     needs: [prepare, build-default]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
-    env:
-      REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
-      - name: Install Podman
-        uses: redhat-actions/podman-install@main
-
-      - name: Login to Registry
+      - name: Install newer podman (from Debian trixie)
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
 
-      - name: Create and Push Manifest Lists
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Create and push multi-arch manifest
         env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.DEFAULT_IMAGE }}
           DATE_TAG: ${{ needs.prepare.outputs.current_date }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
         run: |
-          IMAGE="${REGISTRY}/${NAMESPACE}/gha-runner"
-
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
           if [ "$BRANCH_NAME" = "main" ]; then
-            MANIFEST_TAGS="${DATE_TAG} latest"
+            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-arm64"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG} ${IMAGE_PREFIX}:latest"
           else
-            MANIFEST_TAGS="${DATE_TAG}-${BRANCH_NAME} ${BRANCH_NAME}"
+            AMD64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME}-arm64"
+            TAGS="${IMAGE_PREFIX}:${DATE_TAG}-${BRANCH_NAME} ${IMAGE_PREFIX}:${BRANCH_NAME}"
           fi
 
-          for TAG in $MANIFEST_TAGS; do
-            echo "==> Creating manifest: ${IMAGE}:${TAG}"
-            buildah manifest create "${IMAGE}:${TAG}" \
-              "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
-            buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+          echo "Creating multi-arch manifest from: ${AMD64_IMAGE}, ${ARM64_IMAGE}"
+          sudo podman manifest create default-manifest
+          sudo podman manifest add default-manifest "docker://${AMD64_IMAGE}"
+          sudo podman manifest add default-manifest "docker://${ARM64_IMAGE}"
+
+          for tag in ${TAGS}; do
+            echo "Pushing manifest as: ${tag}"
+            sudo podman manifest push default-manifest "docker://${tag}"
           done
+
+          sudo podman manifest rm default-manifest
