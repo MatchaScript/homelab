@@ -91,10 +91,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install buildah
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y buildah
+      - name: Install podman/buildah
+        uses: gacts/install-podman@v1
 
       - name: Generate Tags
         id: tags
@@ -166,10 +164,8 @@ jobs:
     env:
       REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
-      - name: Install buildah
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y buildah
+      - name: Install podman/buildah
+        uses: gacts/install-podman@v1
 
       - name: Login to Registry
         run: |
@@ -217,10 +213,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install buildah
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y buildah
+      - name: Install podman/buildah
+        uses: gacts/install-podman@v1
 
       - name: Generate Tags
         id: tags
@@ -293,10 +287,8 @@ jobs:
     env:
       REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
-      - name: Install buildah
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y buildah
+      - name: Install podman/buildah
+        uses: gacts/install-podman@v1
 
       - name: Login to Registry
         run: |
