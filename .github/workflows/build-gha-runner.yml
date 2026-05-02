@@ -1,0 +1,323 @@
+name: Build ARC Runner Images
+
+on:
+  schedule:
+    # 毎週日曜日 午前2時(UTC) = 11時(JST)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  FEDORA_BASE: "ghcr.io/matchascript/fedora:latest"
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-24.04
+    outputs:
+      current_date: ${{ steps.set_date.outputs.current_date }}
+      branch_name: ${{ steps.set_branch.outputs.branch_name }}
+      registry: ${{ steps.set_registry.outputs.registry }}
+      can_push: ${{ steps.set_push.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set current date
+        id: set_date
+        env:
+          TZ: "Asia/Tokyo"
+        run: echo "current_date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          # Sanitize branch name for use as OCI tag (replace '/' with '-')
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//\//-}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Current branch: $BRANCH_NAME"
+
+      - name: Set registry
+        id: set_registry
+        run: |
+          REGISTRY="${{ inputs.target_registry || env.REGISTRY }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Set push permission
+        id: set_push
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "devel" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build Slim — amd64 / arm64
+  # ════════════════════════════════════════════════════
+  build-slim:
+    name: Build Runner Slim (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Generate Tags
+        id: tags
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAGS="${DATE_TAG}-${ARCH} latest-${ARCH}"
+          else
+            TAGS="${DATE_TAG}-${BRANCH_NAME}-${ARCH} ${BRANCH_NAME}-${ARCH}"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          context: ./containers
+          containerfiles: ./containers/gha-runner/base.Containerfile
+          image: ${{ env.NAMESPACE }}/gha-runner-slim
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            BASE_IMAGE=${{ env.FEDORA_BASE }}
+            TARGETARCH=${{ matrix.arch }}
+
+      - name: Test Image
+        run: |
+          TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d' ' -f1)
+          IMAGE="localhost/${{ steps.build_image.outputs.image }}:${TAG}"
+          echo "Testing image: ${IMAGE}"
+          CONTAINER=$(buildah from "${IMAGE}")
+          trap "buildah rm ${CONTAINER}" EXIT
+
+          # Runner entrypoint
+          buildah run "${CONTAINER}" test -x /home/runner/run.sh
+
+          # Core tools
+          buildah run "${CONTAINER}" node --version
+          buildah run "${CONTAINER}" git --version
+          buildah run "${CONTAINER}" jq --version
+          buildah run "${CONTAINER}" curl --version
+          buildah run "${CONTAINER}" uv --version
+          buildah run "${CONTAINER}" skopeo --version
+
+          # Runner user and permissions
+          buildah run "${CONTAINER}" id | grep -q "uid=1001"
+          buildah run "${CONTAINER}" id | grep -q "docker"
+          buildah run "${CONTAINER}" sh -c "grep runner /etc/subuid | wc -l | grep -q 2"
+
+      - name: Push to Registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Slim Manifest ─────────────────────────────────────
+  manifest-slim:
+    name: Create Slim Manifest
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-slim]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+    steps:
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+
+      - name: Create and Push Manifest Lists
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          IMAGE="${REGISTRY}/${NAMESPACE}/gha-runner-slim"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            MANIFEST_TAGS="${DATE_TAG} latest"
+          else
+            MANIFEST_TAGS="${DATE_TAG}-${BRANCH_NAME} ${BRANCH_NAME}"
+          fi
+
+          for TAG in $MANIFEST_TAGS; do
+            echo "==> Creating manifest: ${IMAGE}:${TAG}"
+            buildah manifest create "${IMAGE}:${TAG}" \
+              "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
+            buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+          done
+
+  # ════════════════════════════════════════════════════
+  #  Build Default — amd64 / arm64
+  # ════════════════════════════════════════════════════
+  build-default:
+    name: Build Runner Default (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: [prepare, build-slim]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Generate Tags
+        id: tags
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAGS="${DATE_TAG}-${ARCH} latest-${ARCH}"
+            SLIM_BASE_TAG="latest-${ARCH}"
+          else
+            TAGS="${DATE_TAG}-${BRANCH_NAME}-${ARCH} ${BRANCH_NAME}-${ARCH}"
+            SLIM_BASE_TAG="${BRANCH_NAME}-${ARCH}"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "slim_base_tag=$SLIM_BASE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          context: ./containers
+          containerfiles: ./containers/gha-runner/default.Containerfile
+          image: ${{ env.NAMESPACE }}/gha-runner
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/gha-runner-slim:${{ steps.tags.outputs.slim_base_tag }}
+
+      - name: Test Image
+        run: |
+          TAG=$(echo "${{ steps.tags.outputs.tags }}" | cut -d' ' -f1)
+          IMAGE="localhost/${{ steps.build_image.outputs.image }}:${TAG}"
+          echo "Testing image: ${IMAGE}"
+          CONTAINER=$(buildah from "${IMAGE}")
+          trap "buildah rm ${CONTAINER}" EXIT
+
+          # Build tools
+          buildah run "${CONTAINER}" gcc --version
+          buildah run "${CONTAINER}" g++ --version
+          buildah run "${CONTAINER}" cmake --version
+          buildah run "${CONTAINER}" make --version
+          buildah run "${CONTAINER}" python3 --version
+
+          # Utility tools
+          buildah run "${CONTAINER}" shellcheck --version
+          buildah run "${CONTAINER}" yamllint --version
+          buildah run "${CONTAINER}" rsync --version
+          buildah run "${CONTAINER}" ssh -V
+
+      - name: Push to Registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Default Manifest ──────────────────────────────────
+  manifest-default:
+    name: Create Default Manifest
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-default]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+    steps:
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+
+      - name: Create and Push Manifest Lists
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          IMAGE="${REGISTRY}/${NAMESPACE}/gha-runner"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            MANIFEST_TAGS="${DATE_TAG} latest"
+          else
+            MANIFEST_TAGS="${DATE_TAG}-${BRANCH_NAME} ${BRANCH_NAME}"
+          fi
+
+          for TAG in $MANIFEST_TAGS; do
+            echo "==> Creating manifest: ${IMAGE}:${TAG}"
+            buildah manifest create "${IMAGE}:${TAG}" \
+              "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
+            buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+          done
