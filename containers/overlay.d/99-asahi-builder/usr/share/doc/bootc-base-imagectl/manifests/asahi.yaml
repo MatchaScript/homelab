@@ -1,0 +1,17 @@
+include:
+  - ./minimal/manifest.yaml
+packages:
+  # Include and set the default editor
+  - kernel-16k
+  - dracut-asahi
+  - update-m1n1
+  - alsa-ucm-asahi
+  - grub2-efi-aa64-modules
+  - uboot-images-armv8
+  - asahi-repos
+  - linux-firmware-vendor
+  - asahi-fwupdate
+  - bubblewrap
+  - zswap-cli
+exclude-packages:
+  - kernel

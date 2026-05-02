@@ -1,0 +1,400 @@
+name: Build Bootc Images
+
+on:
+  schedule:
+    # 毎週日曜日 午前2時(UTC) = 11時(JST)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type to execute"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - base
+          - hyperv
+          - asahi
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  FEDORA_IMAGE: fedora-bootc
+  ASAHI_IMAGE: asahi-bootc
+  BOOTC_BASE: "quay.io/fedora/fedora-bootc:latest"
+  CONTEXT_DIR: ./containers
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-24.04
+    outputs:
+      current_date: ${{ steps.set_date.outputs.current_date }}
+      version_id: ${{ steps.get_version.outputs.version_id }}
+      branch_name: ${{ steps.set_branch.outputs.branch_name }}
+      registry: ${{ steps.set_registry.outputs.registry }}
+      can_push: ${{ steps.set_push.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
+
+      - name: Set current date
+        id: set_date
+        env:
+          TZ: "Asia/Tokyo"
+        run: echo "current_date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Get VERSION_ID from bootc base image
+        id: get_version
+        run: |
+          VERSION_ID=$(sudo podman run --rm ${{ env.BOOTC_BASE }} cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID=$(sudo podman inspect ${{ env.BOOTC_BASE }} --format='{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "rawhide")
+          fi
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "<no value>" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID="rawhide"
+          fi
+
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+          echo "Detected VERSION_ID: $VERSION_ID"
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//\//-}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Current branch: $BRANCH_NAME"
+
+      - name: Set registry
+        id: set_registry
+        run: |
+          REGISTRY="${{ inputs.target_registry || env.REGISTRY }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Set push permission
+        id: set_push
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "devel" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build fedora-bootc base — amd64 / arm64
+  # ════════════════════════════════════════════════════
+  build-base:
+    name: Build fedora-bootc base (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    if: ${{ inputs.build_type == 'all' || inputs.build_type == 'base' || github.event_name == 'schedule' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
+
+      - name: Generate Tags
+        id: tags
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.FEDORA_IMAGE }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${ARCH},${IMAGE_PREFIX}:${VERSION_ID}-${ARCH},${IMAGE_PREFIX}:latest-${ARCH}"
+          else
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${BRANCH_NAME}-${ARCH},${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}-${ARCH}"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Build base image (podman)
+        env:
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+        run: |
+          sudo podman build \
+            --platform linux/${{ matrix.arch }} \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg VERSION_ID="${VERSION_ID}" \
+            --tag temp-base-${{ matrix.arch }} \
+            -f ${{ env.CONTEXT_DIR }}/bootc-images/base.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Rechunk base image
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-base-${{ matrix.arch }}:latest localhost/rechunked-temp-base-${{ matrix.arch }}:latest
+          sudo podman tag localhost/rechunked-temp-base-${{ matrix.arch }}:latest localhost/temp-base-${{ matrix.arch }}:latest
+          sudo podman rmi localhost/rechunked-temp-base-${{ matrix.arch }}:latest
+
+      - name: Login to registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Tag and push
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-base-${{ matrix.arch }} "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ── fedora-bootc base multi-arch manifest ─────────────
+  manifest-base:
+    name: Create fedora-bootc base manifest
+    runs-on: ubuntu-24.04
+    needs: [prepare, build-base]
+    if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'base' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    steps:
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Create and push multi-arch manifest
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.FEDORA_IMAGE }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
+          if [ "$BRANCH_NAME" = "main" ]; then
+            AMD64_IMAGE="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-arm64"
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG} ${IMAGE_PREFIX}:${VERSION_ID} ${IMAGE_PREFIX}:latest"
+          else
+            AMD64_IMAGE="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-amd64"
+            ARM64_IMAGE="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-arm64"
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME} ${IMAGE_PREFIX}:${BRANCH_NAME} ${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}"
+          fi
+
+          echo "Creating multi-arch manifest from: ${AMD64_IMAGE}, ${ARM64_IMAGE}"
+          sudo podman manifest create base-manifest
+          sudo podman manifest add base-manifest "docker://${AMD64_IMAGE}"
+          sudo podman manifest add base-manifest "docker://${ARM64_IMAGE}"
+
+          for tag in ${TAGS}; do
+            echo "Pushing manifest as: ${tag}"
+            sudo podman manifest push base-manifest "docker://${tag}"
+          done
+
+          sudo podman manifest rm base-manifest
+
+  # ════════════════════════════════════════════════════
+  #  Build fedora-bootc hyperv variant — amd64 only
+  # ════════════════════════════════════════════════════
+  build-hyperv:
+    name: Build fedora-bootc hyperv (amd64)
+    runs-on: ubuntu-24.04
+    needs: [prepare, manifest-base]
+    if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'hyperv' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
+
+      - name: Generate Tags
+        id: tags
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.FEDORA_IMAGE }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
+          if [ "$BRANCH_NAME" = "main" ]; then
+            # per-arch + alias (no arch suffix)
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-hyperv-amd64,${IMAGE_PREFIX}:${VERSION_ID}-hyperv-amd64,${IMAGE_PREFIX}:latest-hyperv-amd64,${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-hyperv,${IMAGE_PREFIX}:${VERSION_ID}-hyperv,${IMAGE_PREFIX}:latest-hyperv"
+          else
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-hyperv-amd64,${IMAGE_PREFIX}:${BRANCH_NAME}-hyperv-amd64,${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}-hyperv-amd64,${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-hyperv,${IMAGE_PREFIX}:${BRANCH_NAME}-hyperv,${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}-hyperv"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Build hyperv image (podman)
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.FEDORA_IMAGE }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+        run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            BOOTC_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE}:latest-amd64"
+          else
+            BOOTC_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE}:${BRANCH_NAME}-amd64"
+          fi
+          echo "Using BOOTC_BASE=${BOOTC_BASE}"
+
+          sudo podman build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg BOOTC_BASE="${BOOTC_BASE}" \
+            --build-arg VERSION_ID="${VERSION_ID}" \
+            --tag temp-hyperv-amd64 \
+            -f ${{ env.CONTEXT_DIR }}/bootc-images/hyper-v.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Tag and push
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-hyperv-amd64 "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+  # ════════════════════════════════════════════════════
+  #  Build asahi-bootc — arm64 only
+  # ════════════════════════════════════════════════════
+  build-asahi:
+    name: Build asahi-bootc (arm64)
+    runs-on: ubuntu-24.04-arm
+    needs: prepare
+    if: ${{ inputs.build_type == 'all' || inputs.build_type == 'asahi' || github.event_name == 'schedule' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install newer podman (from Debian trixie)
+        run: |
+          sudo apt-get install -y debian-archive-keyring
+          echo 'deb [signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://ftp.debian.org/debian/ trixie main' | sudo tee /etc/apt/sources.list.d/trixie.list
+          sudo apt-get update
+          sudo apt-get install -y crun/trixie podman/trixie
+
+      - name: Generate Tags
+        id: tags
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          NAMESPACE: ${{ env.NAMESPACE }}
+          IMAGE: ${{ env.ASAHI_IMAGE }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          IMAGE_PREFIX="${REGISTRY}/${NAMESPACE}/${IMAGE}"
+          if [ "$BRANCH_NAME" = "main" ]; then
+            # per-arch + alias (no arch suffix)
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-arm64,${IMAGE_PREFIX}:${VERSION_ID}-arm64,${IMAGE_PREFIX}:latest-arm64,${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG},${IMAGE_PREFIX}:${VERSION_ID},${IMAGE_PREFIX}:latest"
+          else
+            TAGS="${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}-arm64,${IMAGE_PREFIX}:${BRANCH_NAME}-arm64,${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}-arm64,${IMAGE_PREFIX}:${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME},${IMAGE_PREFIX}:${BRANCH_NAME},${IMAGE_PREFIX}:${VERSION_ID}-${BRANCH_NAME}"
+          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Build asahi image (podman)
+        env:
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+        run: |
+          sudo podman build \
+            --platform linux/arm64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg VERSION_ID="${VERSION_ID}" \
+            --tag temp-asahi \
+            -f ${{ env.CONTEXT_DIR }}/bootc-images/asahi.Containerfile \
+            ${{ env.CONTEXT_DIR }}
+
+      - name: Rechunk asahi image
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-asahi:latest localhost/rechunked-temp-asahi:latest
+          sudo podman tag localhost/rechunked-temp-asahi:latest localhost/temp-asahi:latest
+          sudo podman rmi localhost/rechunked-temp-asahi:latest
+
+      - name: Login to registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
+
+      - name: Tag and push
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
+            sudo podman tag temp-asahi "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
