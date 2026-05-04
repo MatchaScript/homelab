@@ -1,0 +1,81 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: replica-from-objectstore
+spec:
+  timeouts:
+    apply: 30s
+    assert: 8m
+    cleanup: 2m
+  steps:
+    - name: Clear the MinIO bucket prefix
+      try:
+        - apply:
+            file: ./00-minio-cleanup.yaml
+        - assert:
+            file: ./00-minio-cleanup-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=minio-cleanup
+
+    - name: Install the primary cluster
+      try:
+        - script:
+            content: |
+              set -eu
+              "${CHART_DIR}/test/support/s3-secret.sh" "${NAMESPACE}" primary-cnpg-cluster-backup
+              helm upgrade --install primary "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./01-primary-cluster.yaml \
+                --wait --timeout 5m
+        - assert:
+            file: ./01-primary-cluster-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+
+    - name: Take an on-demand backup of the primary
+      try:
+        - apply:
+            file: ./01-primary-backup.yaml
+        - apply:
+            file: ./01-primary-checkpoint.yaml
+        - assert:
+            file: ./01-primary-backup-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Backup
+
+    - name: Install the replica cluster
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade --install replica "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./02-replica.yaml \
+                --wait --timeout 8m
+        - assert:
+            file: ./02-replica-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+
+    - name: Verify streaming replication
+      try:
+        - apply:
+            file: ./03-streaming-write.yaml
+        - assert:
+            file: ./03-streaming-write-assert.yaml
+        - apply:
+            file: ./03-streaming-read.yaml
+        - assert:
+            file: ./03-streaming-read-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=streaming-write
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=streaming-read

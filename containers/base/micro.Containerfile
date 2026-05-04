@@ -34,7 +34,14 @@ RUN rm -rf /mnt/sys-root/var/cache/dnf /mnt/sys-root/var/log/dnf* /mnt/sys-root/
 
 FROM scratch
 ARG VERSION_ID
+LABEL org.opencontainers.image.title="fedora-micro"
+LABEL org.opencontainers.image.description="Ultra-minimal Fedora userspace image (micro variant) for the fjord homelab"
 LABEL org.opencontainers.image.version=${VERSION_ID}
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"
+LABEL org.opencontainers.image.base.name="quay.io/fedora/fedora:latest"
 COPY --from=system-build /mnt/sys-root/ /
 
 CMD /bin/sh

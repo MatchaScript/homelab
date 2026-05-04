@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dns-query-via-dnsdist
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: dns-query-via-dnsdist
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: dig
+          image: alpine:3.20
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              apk add --no-cache bind-tools >/dev/null
+              # +norecurse routes the query through dnsdist's "auth" pool
+              # (RDRule sends RD-set queries to the recursor pool).
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if dig +short +tcp +norecurse @pdns-powerdns-dnsdist -p 53 test.example.test A | grep -qx '10.1.2.3'; then
+                  echo "OK: A record resolved correctly via dnsdist"
+                  exit 0
+                fi
+                echo "attempt $i: not yet, retrying..."
+                sleep 3
+              done
+              echo "FAIL: A record did not resolve via dnsdist"
+              dig +norecurse @pdns-powerdns-dnsdist -p 53 test.example.test A || true
+              exit 1

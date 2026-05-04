@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "powerdns.fullname" . }}
+  labels:
+    {{- include "powerdns.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "powerdns.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "powerdns.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- $dbSecretName := required "postgresql.credentialsSecret is required" .Values.postgresql.credentialsSecret }}
+        {{- $dbSecret := lookup "v1" "Secret" .Release.Namespace $dbSecretName }}
+        {{- if $dbSecret }}
+        checksum/db-secret: {{ $dbSecret.data | toYaml | sha256sum }}
+        {{- end }}
+        {{- if .Values.powerdns.appCredentialsSecret }}
+        {{- $appSecret := lookup "v1" "Secret" .Release.Namespace .Values.powerdns.appCredentialsSecret }}
+        {{- if $appSecret }}
+        checksum/app-secret: {{ $appSecret.data | toYaml | sha256sum }}
+        {{- end }}
+        {{- end }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.affinity }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+      {{- else if gt (int .Values.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "powerdns.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      {{- end }}
+      initContainers:
+        - name: wait-for-db
+          image: "{{ .Values.waitForDb.image.repository }}:{{ .Values.waitForDb.image.tag }}"
+          imagePullPolicy: {{ .Values.waitForDb.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              host="{{ required "postgresql.host is required" .Values.postgresql.host }}"
+              port="{{ .Values.postgresql.port }}"
+              echo "waiting for ${host}:${port}..."
+              until nc -z "${host}" "${port}"; do
+                sleep 2
+              done
+              echo "${host}:${port} reachable"
+        - name: init-credentials
+          image: "{{ .Values.initContainer.image.repository }}:{{ .Values.initContainer.image.tag }}"
+          imagePullPolicy: {{ .Values.initContainer.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              echo "gpgsql-user=${PGUSER}" > /etc/powerdns/pdns.d/credentials.conf
+              echo "gpgsql-password=${PGPASSWORD}" >> /etc/powerdns/pdns.d/credentials.conf
+              if [ -n "${API_KEY}" ]; then
+                echo "api-key=${API_KEY}" >> /etc/powerdns/pdns.d/credentials.conf
+              fi
+              if [ -n "${WEBSERVER_PASSWORD}" ]; then
+                echo "webserver-password=${WEBSERVER_PASSWORD}" >> /etc/powerdns/pdns.d/credentials.conf
+              fi
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $dbSecretName }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $dbSecretName }}
+                  key: password
+            {{- if .Values.powerdns.appCredentialsSecret }}
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.powerdns.appCredentialsSecret }}
+                  key: api-key
+                  optional: true
+            - name: WEBSERVER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.powerdns.appCredentialsSecret }}
+                  key: webserver-password
+                  optional: true
+            {{- end }}
+          volumeMounts:
+            - name: pdns-credentials
+              mountPath: /etc/powerdns/pdns.d
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: dns-tcp
+              containerPort: 5353
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 5353
+              protocol: UDP
+            - name: webserver
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: pdns-config
+              mountPath: /etc/powerdns/pdns.conf
+              subPath: pdns.conf
+            - name: pdns-credentials
+              mountPath: /etc/powerdns/pdns.d
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: pdns-config
+          configMap:
+            name: {{ include "powerdns.fullname" . }}
+        - name: pdns-credentials
+          emptyDir: {}

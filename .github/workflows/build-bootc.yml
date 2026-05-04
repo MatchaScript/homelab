@@ -30,6 +30,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -137,16 +138,33 @@ jobs:
           version: ${{ needs.prepare.outputs.version_id }}
           arches: ${{ matrix.arch }}
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.FEDORA_IMAGE }}
+          description: "Fedora bootc base image for the fjord homelab"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.BOOTC_BASE }}
+
       - name: Build base image (podman)
         env:
           VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo podman build \
             --platform linux/${{ matrix.arch }} \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
             --build-arg VERSION_ID="${VERSION_ID}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-base-${{ matrix.arch }} \
             -f ${{ env.CONTEXT_DIR }}/bootc/base/fedora.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -176,6 +194,15 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ── fedora-bootc base multi-arch manifest ─────────────
   manifest-base:
@@ -224,6 +251,14 @@ jobs:
 
           sudo podman manifest rm base-manifest
 
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
   # ════════════════════════════════════════════════════
   #  Build fedora-bootc hyperv variant — amd64 only
   # ════════════════════════════════════════════════════
@@ -249,6 +284,15 @@ jobs:
           variant: hyperv
           arches: "amd64 -"
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "${{ env.FEDORA_IMAGE }}-hyperv"
+          description: "Fedora bootc image with Hyper-V guest integration services"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: "${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.FEDORA_IMAGE }}"
+
       - name: Build hyperv image (podman)
         env:
           REGISTRY: ${{ needs.prepare.outputs.registry }}
@@ -256,7 +300,14 @@ jobs:
           IMAGE: ${{ env.FEDORA_IMAGE }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           if [ "$BRANCH_NAME" = "main" ]; then
             BOOTC_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE}:latest-amd64"
           else
@@ -271,6 +322,7 @@ jobs:
             --device /dev/fuse \
             --build-arg BOOTC_BASE="${BOOTC_BASE}" \
             --build-arg VERSION_ID="${VERSION_ID}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-hyperv-amd64 \
             -f ${{ env.CONTEXT_DIR }}/bootc/extensions/hyper-v.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -286,6 +338,14 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ════════════════════════════════════════════════════
   #  Build asahi-bootc — arm64 only
@@ -311,16 +371,33 @@ jobs:
           version: ${{ needs.prepare.outputs.version_id }}
           arches: "arm64 -"
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.ASAHI_IMAGE }}
+          description: "Fedora Asahi bootc image for Apple Silicon (arm64)"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.BOOTC_BASE }}
+
       - name: Build asahi image (podman)
         env:
           VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo podman build \
             --platform linux/arm64 \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
             --build-arg VERSION_ID="${VERSION_ID}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-asahi \
             -f ${{ env.CONTEXT_DIR }}/bootc/base/asahi.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -350,3 +427,12 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

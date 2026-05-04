@@ -1,0 +1,7 @@
+# Local kind kubeconfig export
+kubeconfig
+*.kubeconfig
+
+# chainsaw run artifacts
+.chainsaw/
+chainsaw-report.xml

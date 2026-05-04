@@ -1,8 +1,8 @@
 FROM quay.io/fedora/fedora-bootc:latest AS builder
 # https://gitlab.com/fedora/bootc/base-images/-/issues/49
 ARG TARGETARCH='arm64'
-COPY overlay.d/50-asahi/ /
 COPY overlay.d/99-asahi-builder/ /
+COPY overlay.d/01-common/ /
 RUN dnf install -y --setopt=install_weak_deps=False \
     --setopt=tsflags=nodocs \
     dnf5-plugins
@@ -23,9 +23,16 @@ dnf clean all && rm -rf /var/cache/dnf
 bootc container lint
 EOF
 
-LABEL containers.bootc 1
-LABEL ostree.bootable 1
+LABEL containers.bootc=1
+LABEL ostree.bootable=1
+LABEL org.opencontainers.image.title="asahi-bootc"
+LABEL org.opencontainers.image.description="Fedora Asahi bootc base image for Apple Silicon (arm64) in the fjord homelab"
 LABEL org.opencontainers.image.version="${VERSION_ID}"
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"
+LABEL org.opencontainers.image.base.name="quay.io/fedora/fedora-bootc:latest"
 
 STOPSIGNAL SIGRTMIN+3
 CMD ["/sbin/init"]

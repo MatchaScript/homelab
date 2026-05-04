@@ -1,0 +1,27 @@
+mode: standalone
+
+cluster:
+  instances: 1
+  # Test runs a CHECKPOINT Job against the *-superuser secret.
+  enableSuperuserAccess: true
+  storage:
+    size: 1Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+backups:
+  enabled: true
+  destinationPath: "s3://mybucket/scheduled"
+  endpointURL: "http://minio.minio.svc.cluster.local"
+  s3CredentialsSecret: scheduled-cnpg-cluster-backup
+  retentionPolicy: "7d"
+  scheduledBackups:
+    - name: every-minute
+      schedule: "0 */1 * * * *"
+      immediate: true
+
+monitoring:
+  enabled: false

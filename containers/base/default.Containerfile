@@ -67,7 +67,14 @@ RUN systemctl set-default multi-user.target; \
 FROM scratch
 COPY --from=stage2 / /
 ARG VERSION_ID
+LABEL org.opencontainers.image.title="fedora"
+LABEL org.opencontainers.image.description="Minimal Fedora userspace image (default variant) for the fjord homelab"
 LABEL org.opencontainers.image.version=${VERSION_ID}
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"
+LABEL org.opencontainers.image.base.name="quay.io/fedora/fedora:latest"
 ENV LANG=C.utf8
 
 CMD ["/bin/bash"]

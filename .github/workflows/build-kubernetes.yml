@@ -25,6 +25,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -123,10 +124,26 @@ jobs:
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.IMAGE }}
+          description: "Kubernetes node bootc image (kubelet, kubeadm, cri-o) — amd64 base"
+          version: "${{ needs.prepare.outputs.kubernetes_version }}-${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.SYSBASE_AMD64 }}
+
       - name: Build kubernetes amd64 base (buildah)
         env:
           KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo buildah build \
             --platform linux/amd64 \
             --security-opt=label=disable \
@@ -136,6 +153,7 @@ jobs:
             --build-arg TARGETARCH=amd64 \
             --build-arg KUBERNETES_VERSION="${KUBERNETES_VERSION}" \
             --build-arg KUBEADM_VERSION="${KUBERNETES_VERSION}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-k8s-amd64 \
             -f ${{ env.CONTEXT_DIR }}/bootc/kubernetes/base.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -187,6 +205,15 @@ jobs:
             echo "Pushed: ${tag}"
           done
 
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
   # ════════════════════════════════════════════════════
   #  Build Intel variant (amd64)
   # ════════════════════════════════════════════════════
@@ -220,14 +247,32 @@ jobs:
           fi
           echo "ref=${REGISTRY}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${PRIMARY}-amd64" >> $GITHUB_OUTPUT
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "${{ env.IMAGE }}-intel"
+          description: "Kubernetes bootc image tuned for Intel CPUs (intel-lpmd, IOMMU)"
+          version: "${{ needs.build-amd64-base.outputs.kubelet_version }}-${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ steps.amd64_base.outputs.ref }}
+
       - name: Build kubernetes intel (buildah)
+        env:
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo buildah build \
             --platform linux/amd64 \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
             --build-arg AMD64_BASE=${{ steps.amd64_base.outputs.ref }} \
+            "${LABEL_ARGS[@]}" \
             --tag temp-k8s-intel \
             -f ${{ env.CONTEXT_DIR }}/bootc/extensions/intel.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -250,6 +295,14 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ════════════════════════════════════════════════════
   #  Build Ryzen variant (amd64)
@@ -284,14 +337,32 @@ jobs:
           fi
           echo "ref=${REGISTRY}/${{ env.NAMESPACE }}/${{ env.IMAGE }}:${PRIMARY}-amd64" >> $GITHUB_OUTPUT
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "${{ env.IMAGE }}-ryzen"
+          description: "Kubernetes bootc image tuned for AMD Ryzen CPUs (AMD IOMMU)"
+          version: "${{ needs.build-amd64-base.outputs.kubelet_version }}-${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ steps.amd64_base.outputs.ref }}
+
       - name: Build kubernetes ryzen (buildah)
+        env:
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo buildah build \
             --platform linux/amd64 \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
             --build-arg AMD64_BASE=${{ steps.amd64_base.outputs.ref }} \
+            "${LABEL_ARGS[@]}" \
             --tag temp-k8s-ryzen \
             -f ${{ env.CONTEXT_DIR }}/bootc/extensions/ryzen.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -315,6 +386,14 @@ jobs:
             echo "Pushed: ${tag}"
           done
 
+      - name: Sign pushed images (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
   # ════════════════════════════════════════════════════
   #  Build Asahi variant (arm64)
   # ════════════════════════════════════════════════════
@@ -330,10 +409,26 @@ jobs:
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "${{ env.IMAGE }}-asahi"
+          description: "Kubernetes node bootc image (kubelet, kubeadm, cri-o) — Asahi arm64"
+          version: "${{ needs.prepare.outputs.kubernetes_version }}-${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.SYSBASE_ASAHI }}
+
       - name: Build kubernetes asahi (buildah)
         env:
           KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo buildah build \
             --platform linux/arm64 \
             --security-opt=label=disable \
@@ -343,6 +438,7 @@ jobs:
             --build-arg TARGETARCH=arm64 \
             --build-arg KUBERNETES_VERSION="${KUBERNETES_VERSION}" \
             --build-arg KUBEADM_VERSION="${KUBERNETES_VERSION}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-k8s-asahi \
             -f ${{ env.CONTEXT_DIR }}/bootc/kubernetes/base.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -394,3 +490,12 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

@@ -39,3 +39,10 @@ ENV RUNNER_MANUALLY_TRAP_SIG=1 \
     _CONTAINERS_USERNS_CONFIGURED="" \
     BUILDAH_ISOLATION=chroot \
     LANG=C.utf8
+
+LABEL org.opencontainers.image.title="gha-runner"
+LABEL org.opencontainers.image.description="Default Actions Runner Controller (ARC) image with build toolchains for the fjord homelab"
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"

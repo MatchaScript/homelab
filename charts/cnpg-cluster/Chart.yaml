@@ -1,0 +1,22 @@
+#
+# Forked from cloudnative-pg/charts (cluster v0.6.0).
+# Original work: Copyright © contributors to CloudNativePG.
+# Licensed under Apache License, Version 2.0.
+#
+apiVersion: v2
+name: cnpg-cluster
+description: Deploys a CloudNativePG cluster wired to the barman-cloud plugin (ObjectStore CR). Forked from cloudnative-pg/charts cluster v0.6.0.
+kubeVersion: ">=1.29.0-0"
+icon: https://raw.githubusercontent.com/cloudnative-pg/artwork/main/cloudnativepg-logo.svg
+type: application
+version: 0.1.0
+sources:
+  - https://github.com/MatchaScript/homelab
+  - https://github.com/cloudnative-pg/charts
+keywords:
+  - postgresql
+  - postgres
+  - database
+  - cloudnative-pg
+  - barman-cloud
+home: https://cloudnative-pg.io

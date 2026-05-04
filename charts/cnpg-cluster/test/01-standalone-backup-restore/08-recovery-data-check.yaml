@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: recovery-from-objectstore-data-check
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: recovery-from-objectstore-data-check
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          env:
+            - name: PGURI
+              valueFrom:
+                secretKeyRef:
+                  name: recovery-from-objectstore-cnpg-cluster-app
+                  key: uri
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              # See 06-recovery-data-check for the rationale: WAL replay reaches
+              # end-of-WAL by default, so we only assert the pre-backup row is
+              # present.
+              PRE=$(psql -At "$PGURI" -c "SELECT count(*) FROM test_rows WHERE phase='pre-backup';")
+              POST=$(psql -At "$PGURI" -c "SELECT count(*) FROM test_rows WHERE phase='post-backup';")
+              echo "pre-backup=${PRE} post-backup=${POST}"
+              test "${PRE}" = "1"

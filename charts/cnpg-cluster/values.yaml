@@ -1,0 +1,242 @@
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the chart
+fullnameOverride: ""
+# -- Override the namespace of the chart
+namespaceOverride: ""
+
+version:
+  # -- PostgreSQL major version to use
+  postgresql: "16"
+
+###
+# -- Cluster mode of operation. Available modes:
+# * `standalone` - default. Creates new or updates an existing CNPG cluster.
+# * `replica` - Creates a replica cluster from an existing CNPG cluster.
+# * `recovery` - Creates a cluster from a backup or object store.
+mode: standalone
+
+recovery:
+  # -- Recovery method. One of:
+  # * `backup` - Recovers from a CNPG Backup CR (PITR supported, same namespace).
+  # * `object_store` - Recovers from an ObjectStore (barman-cloud plugin) (PITR supported).
+  # * `pg_basebackup` - Streaming replication from another postgres.
+  method: backup
+
+  # -- Point in time recovery target.
+  pitrTarget:
+    time: ""
+
+  # -- Required if method is `backup`. Name of the Backup resource to recover from.
+  backupName: ""
+
+  # -- For `object_store` method: name of the existing ObjectStore CR to recover from.
+  objectStoreName: ""
+
+  # -- For `object_store` method: original cluster name (a.k.a. serverName) used in the backup.
+  clusterName: ""
+
+  # -- Name of the database used by the application. Default: `app`.
+  database: app
+  # -- Name of the database owner. Defaults to the value of `database`.
+  owner: ""
+
+  # -- For `pg_basebackup` method: source cluster connection.
+  pgBaseBackup:
+    database: app
+    owner: ""
+    secretName: ""
+    source:
+      host: ""
+      port: 5432
+      username: ""
+      database: "app"
+      sslMode: "verify-full"
+      passwordSecret:
+        create: false
+        name: ""
+        key: "password"
+        value: ""
+      sslKeySecret:
+        name: ""
+        key: ""
+      sslCertSecret:
+        name: ""
+        key: ""
+      sslRootCertSecret:
+        name: ""
+        key: ""
+
+cluster:
+  # -- Number of instances
+  instances: 3
+
+  # -- Container image. Leave empty to use the chart-default postgresql image.
+  imageName: ""
+
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  storage:
+    size: 8Gi
+    storageClass: ""
+
+  walStorage:
+    enabled: false
+    size: 1Gi
+    storageClass: ""
+
+  # -- The UID of the postgres user inside the image. -1 = use default (26).
+  postgresUID: -1
+  postgresGID: -1
+
+  # -- Customization of generated services.
+  services: {}
+
+  # -- Resources requests/limits.
+  resources: {}
+
+  priorityClassName: ""
+  primaryUpdateMethod: switchover
+  primaryUpdateStrategy: unsupervised
+  logLevel: "info"
+
+  affinity:
+    topologyKey: topology.kubernetes.io/zone
+
+  env: []
+  envFrom: []
+
+  certificates: {}
+
+  enableSuperuserAccess: false
+  superuserSecret: ""
+  enablePDB: true
+
+  roles: []
+
+  monitoring:
+    enabled: false
+    podMonitor:
+      enabled: true
+      labels: {}
+      relabelings: []
+      metricRelabelings: []
+    prometheusRule:
+      enabled: true
+      excludeRules: []
+    instrumentation:
+      logicalReplication: true
+    disableDefaultQueries: false
+    customQueries: []
+    customQueriesSecret: []
+
+  postgresql:
+    parameters: {}
+    synchronous: {}
+    pg_hba: []
+    pg_ident: []
+    shared_preload_libraries: []
+    ldap: {}
+
+  # -- BootstrapInitDB configuration. https://cloudnative-pg.io/documentation/current/bootstrap/
+  initdb: {}
+
+  serviceAccountTemplate: {}
+  podSecurityContext: {}
+  securityContext: {}
+
+  additionalLabels: {}
+  annotations: {}
+
+###
+# Backups via the barman-cloud plugin.
+# Generates an ObjectStore CR (barmancloud.cnpg.io/v1) and wires the cluster's `plugins:`.
+# An OBC-style Secret containing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY is expected to
+# exist out-of-chart and is referenced via `s3CredentialsSecret`.
+backups:
+  # -- Enable backups (creates the ObjectStore CR and wires the cluster's plugins).
+  enabled: false
+
+  # -- Name of the ObjectStore CR to create. Defaults to `<fullname>-backup`.
+  objectStoreName: ""
+
+  # -- S3 destination path, e.g. `s3://my-bucket/`.
+  destinationPath: ""
+
+  # -- Custom S3 endpoint (e.g. Ceph RGW). Leave empty for AWS default.
+  endpointURL: ""
+
+  # -- Existing Secret containing AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+  # Defaults to `<fullname>-backup` (typical OBC-generated secret name).
+  s3CredentialsSecret: ""
+
+  # -- Custom CA bundle for the S3 endpoint.
+  endpointCA:
+    name: ""
+    key: ""
+
+  wal:
+    # -- WAL compression: `` (none), `gzip`, `bzip2`, `snappy`.
+    compression: gzip
+    # -- WAL encryption: `` (provider default), `AES256`, `aws:kms`.
+    encryption: ""
+    maxParallel: 1
+  data:
+    compression: gzip
+    encryption: ""
+    jobs: 2
+
+  # -- Retention policy for backups.
+  retentionPolicy: "30d"
+
+  # -- ScheduledBackup resources to create. All use the barman-cloud plugin.
+  scheduledBackups:
+    - name: daily-backup
+      schedule: "0 0 0 * * *"
+      backupOwnerReference: cluster
+
+###
+# Replica cluster (DR / multi-cluster). Only consulted when mode == "replica".
+replica:
+  # -- Name of this cluster (compared with `primary` to determine role).
+  self: ""
+  # -- Name of the primary cluster.
+  primary: ""
+  # -- Demotion token for promotion handshake.
+  promotionToken: ""
+  # -- Replay delay (e.g. "5min"). Cannot be combined with promotionToken.
+  minApplyDelay: ""
+  bootstrap:
+    # -- One of `object_store` or `pg_basebackup`.
+    source: ""
+    database: ""
+    secret: ""
+    owner: ""
+  origin:
+    objectStore:
+      # -- Name of the source ObjectStore CR.
+      name: ""
+      # -- Source cluster's serverName.
+      clusterName: ""
+    pg_basebackup:
+      host: ""
+      port: 5432
+      username: ""
+      sslMode: verify-full
+      database: ""
+      sslKeySecret:
+        name: ""
+        key: ""
+      sslCertSecret:
+        name: ""
+        key: ""
+      sslRootCertSecret:
+        name: ""
+        key: ""
+      passwordSecret:
+        name: ""
+        key: ""
+
+# -- List of PgBouncer poolers. See upstream cluster chart docs for the schema.
+poolers: []

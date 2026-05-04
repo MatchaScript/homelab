@@ -30,6 +30,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -163,6 +164,15 @@ jobs:
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "Generated tags: $TAGS"
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "fedora-${{ matrix.variant }}"
+          description: "Fedora userspace image (${{ matrix.variant }} variant) for the fjord homelab"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.SYSBASE }}
+
       - name: Build Image
         id: build_image
         uses: redhat-actions/buildah-build@v2
@@ -171,11 +181,13 @@ jobs:
           containerfiles: ./containers/base/${{ matrix.variant }}.Containerfile
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.labels.outputs.labels }}
           build-args: |
             SYSBASE=${{ env.SYSBASE }}
             VERSION_ID=${{ needs.prepare.outputs.version_id }}
 
       - name: Push to Registry
+        id: push_image
         if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
         uses: redhat-actions/push-to-registry@v2
         with:
@@ -184,6 +196,29 @@ jobs:
           registry: ${{ needs.prepare.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute pushed references
+        id: pushed_refs
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          REFS=()
+          for t in $TAGS; do
+            REFS+=("${REGISTRY}/${IMAGE_NAME}:${t}")
+          done
+          (IFS=,; echo "refs=${REFS[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.pushed_refs.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ════════════════════════════════════════════════════
   #  Multi-arch manifest per variant
@@ -200,6 +235,8 @@ jobs:
     env:
       REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Install buildah
         run: |
           sudo apt-get update
@@ -210,6 +247,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
 
       - name: Create and Push Manifest Lists
+        id: manifest_push
         env:
           VERSION_ID: ${{ needs.prepare.outputs.version_id }}
           DATE_TAG: ${{ needs.prepare.outputs.current_date }}
@@ -233,9 +271,21 @@ jobs:
             MANIFEST_TAGS="${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}${VARIANT_SUFFIX} ${BRANCH_NAME}${VARIANT_SUFFIX} ${VERSION_ID}-${BRANCH_NAME}${VARIANT_SUFFIX}"
           fi
 
+          PUSHED_REFS=()
           for TAG in $MANIFEST_TAGS; do
             echo "==> Creating manifest: ${IMAGE}:${TAG}"
             buildah manifest create "${IMAGE}:${TAG}" \
               "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
             buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+            PUSHED_REFS+=("${IMAGE}:${TAG}")
           done
+
+          (IFS=,; echo "refs=${PUSHED_REFS[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.manifest_push.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,47 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: scheduled-backup
+spec:
+  timeouts:
+    apply: 30s
+    assert: 8m
+    cleanup: 2m
+  steps:
+    - name: Clear the MinIO bucket prefix
+      try:
+        - apply:
+            file: ./00-minio-cleanup.yaml
+        - assert:
+            file: ./00-minio-cleanup-assert.yaml
+
+    - name: Install cluster + ScheduledBackup
+      try:
+        - script:
+            content: |
+              set -eu
+              "${CHART_DIR}/test/support/s3-secret.sh" "${NAMESPACE}" scheduled-cnpg-cluster-backup
+              helm upgrade --install scheduled "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./01-cluster.yaml \
+                --wait --timeout 5m
+        - assert:
+            file: ./01-cluster-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: ScheduledBackup
+
+    - name: Wait for the immediate backup to complete
+      try:
+        - apply:
+            file: ./02-checkpoint.yaml
+        - assert:
+            file: ./02-scheduled-backup-completed-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Backup

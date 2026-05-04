@@ -1,0 +1,40 @@
+{{- if .Values.dnsdist.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "powerdns.fullname" . }}-dnsdist
+  labels:
+    {{- include "powerdns.dnsdist.labels" . | nindent 4 }}
+data:
+  dnsdist.conf: |
+    {{- if .Values.dnsdist.config }}
+    {{- .Values.dnsdist.config | nindent 4 }}
+    {{- else }}
+    setLocal("0.0.0.0:5353")
+    addLocal("[::]:5353")
+    setACL({"0.0.0.0/0", "::/0"})
+    setServerPolicy(leastOutstanding)
+
+    -- Resolve auth server ClusterIP and add as backend
+    getAddressInfo("{{ include "powerdns.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}.", function(hostname, ips)
+      for _, ip in ipairs(ips) do
+        newServer({address=ip:toString() .. ":{{ .Values.service.port }}", pool="auth", name="auth", checkInterval=5, rise=2, mustResolve=false})
+      end
+    end)
+
+    {{- if .Values.recursor.enabled }}
+    -- Resolve recursor ClusterIP and add as backend
+    getAddressInfo("{{ include "powerdns.fullname" . }}-recursor.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}.", function(hostname, ips)
+      for _, ip in ipairs(ips) do
+        newServer({address=ip:toString() .. ":{{ .Values.recursor.service.port }}", pool="recursor", name="recursor", checkInterval=5, rise=2, mustResolve=false})
+      end
+    end)
+
+    -- Route recursive queries to recursor
+    addAction(RDRule(), PoolAction("recursor"))
+    {{- end }}
+
+    -- Route everything else to auth
+    addAction(AllRule(), PoolAction("auth"))
+    {{- end }}
+{{- end }}

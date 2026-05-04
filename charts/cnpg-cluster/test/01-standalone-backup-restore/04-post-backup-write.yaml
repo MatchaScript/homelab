@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: post-backup-write
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: post-backup-write
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          env:
+            - name: PGURI
+              valueFrom:
+                secretKeyRef:
+                  name: standalone-cnpg-cluster-app
+                  key: uri
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              psql "$PGURI" <<'SQL'
+              INSERT INTO test_rows (phase) VALUES ('post-backup');
+              INSERT INTO test_rows (phase) VALUES ('post-backup');
+              SQL
+              psql "$PGURI" -c "SELECT phase, count(*) FROM test_rows GROUP BY phase;"

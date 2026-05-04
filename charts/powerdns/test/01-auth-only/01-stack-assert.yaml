@@ -1,0 +1,23 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pdns-db-cnpg-cluster
+spec:
+  instances: 1
+status:
+  readyInstances: 1
+  phase: Cluster in healthy state
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pdns-powerdns-schema
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdns-powerdns
+status:
+  readyReplicas: 1
+  availableReplicas: 1

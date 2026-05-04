@@ -1,0 +1,77 @@
+{{- if .Values.dnsdist.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "powerdns.fullname" . }}-dnsdist
+  labels:
+    {{- include "powerdns.dnsdist.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.dnsdist.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "powerdns.dnsdist.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "powerdns.dnsdist.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/dnsdist-configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.dnsdist.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dnsdist.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsdist.affinity }}
+      affinity:
+        {{- toYaml .Values.dnsdist.affinity | nindent 8 }}
+      {{- else if gt (int .Values.dnsdist.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "powerdns.dnsdist.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      {{- end }}
+      containers:
+        - name: dnsdist
+          image: "{{ .Values.dnsdist.image.repository }}:{{ .Values.dnsdist.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.dnsdist.image.pullPolicy }}
+          ports:
+            - name: dns-tcp
+              containerPort: 5353
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 5353
+              protocol: UDP
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: dnsdist-config
+              mountPath: /etc/dnsdist/dnsdist.conf
+              subPath: dnsdist.conf
+          resources:
+            {{- toYaml .Values.dnsdist.resources | nindent 12 }}
+      volumes:
+        - name: dnsdist-config
+          configMap:
+            name: {{ include "powerdns.fullname" . }}-dnsdist
+{{- end }}

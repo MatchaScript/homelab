@@ -1,0 +1,59 @@
+name: "Cosign keyless sign"
+description: "Sign one or more pushed OCI image references with cosign using GitHub OIDC (keyless). Cosign resolves each ref to a digest internally and stores the signature alongside the image in the registry."
+
+inputs:
+  references:
+    description: "Comma- or whitespace-separated list of full image references to sign (e.g. 'ghcr.io/foo/bar:tag1,ghcr.io/foo/bar:tag2'). Each must already be pushed to its registry."
+    required: true
+  cosign_version:
+    description: "Cosign release to install (passed to sigstore/cosign-installer)."
+    required: false
+    default: "v2.4.1"
+  registry_username:
+    description: "Registry username for cosign to read referenced manifests."
+    required: false
+    default: ""
+  registry_password:
+    description: "Registry password/token for cosign to read referenced manifests."
+    required: false
+    default: ""
+  registry:
+    description: "Registry hostname for credential helper (e.g. ghcr.io). Required if registry_username is set."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+      with:
+        cosign-release: ${{ inputs.cosign_version }}
+
+    - name: Sign images
+      shell: bash
+      env:
+        REFERENCES: ${{ inputs.references }}
+        REG_USERNAME: ${{ inputs.registry_username }}
+        REG_PASSWORD: ${{ inputs.registry_password }}
+        REGISTRY: ${{ inputs.registry }}
+        COSIGN_YES: "true"
+      run: |
+        set -euo pipefail
+
+        if [ -n "$REG_USERNAME" ] && [ -n "$REG_PASSWORD" ] && [ -n "$REGISTRY" ]; then
+          echo "$REG_PASSWORD" | cosign login "$REGISTRY" -u "$REG_USERNAME" --password-stdin
+        fi
+
+        # Accept both comma- and whitespace-separated reference lists.
+        REF_LIST="$(echo "$REFERENCES" | tr ',' ' ')"
+
+        signed=0
+        for ref in $REF_LIST; do
+          [ -z "$ref" ] && continue
+          echo "==> cosign sign --yes $ref"
+          cosign sign --yes --recursive --registry-referrers-mode oci-1.1 "$ref"
+          signed=$((signed + 1))
+        done
+
+        echo "Signed $signed reference(s) (cosign resolves each to its digest)."

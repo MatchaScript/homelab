@@ -20,6 +20,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -106,8 +107,25 @@ jobs:
           date: ${{ needs.prepare.outputs.current_date }}
           arches: ${{ matrix.arch }}
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.SLIM_IMAGE }}
+          description: "Slim Actions Runner Controller (ARC) image for the fjord homelab"
+          version: ${{ needs.prepare.outputs.current_date }}
+          base_name: ${{ env.FEDORA_BASE }}
+
       - name: Build slim image (podman)
+        env:
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           sudo podman build \
             --platform linux/${{ matrix.arch }} \
             --security-opt=label=disable \
@@ -115,6 +133,7 @@ jobs:
             --device /dev/fuse \
             --build-arg BASE_IMAGE=${{ env.FEDORA_BASE }} \
             --build-arg TARGETARCH=${{ matrix.arch }} \
+            "${LABEL_ARGS[@]}" \
             --tag temp-slim-${{ matrix.arch }} \
             -f ${{ env.CONTEXT_DIR }}/gha-runner/base.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -150,6 +169,15 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Slim multi-arch manifest ──────────────────────────
   manifest-slim:
@@ -197,6 +225,14 @@ jobs:
 
           sudo podman manifest rm slim-manifest
 
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
   # ════════════════════════════════════════════════════
   #  Build Default — amd64 / arm64
   # ════════════════════════════════════════════════════
@@ -233,6 +269,15 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin ${{ needs.prepare.outputs.registry }}
 
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.DEFAULT_IMAGE }}
+          description: "Default Actions Runner Controller (ARC) image with build toolchains for the fjord homelab"
+          version: ${{ needs.prepare.outputs.current_date }}
+          base_name: "${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.SLIM_IMAGE }}"
+
       - name: Build default image (podman)
         env:
           REGISTRY: ${{ needs.prepare.outputs.registry }}
@@ -240,7 +285,14 @@ jobs:
           SLIM_IMAGE: ${{ env.SLIM_IMAGE }}
           BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
           ARCH: ${{ matrix.arch }}
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
         run: |
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
           if [ "$BRANCH_NAME" = "main" ]; then
             SLIM_BASE_TAG="latest-${ARCH}"
           else
@@ -254,6 +306,7 @@ jobs:
             --cap-add=all \
             --device /dev/fuse \
             --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+            "${LABEL_ARGS[@]}" \
             --tag temp-default-${{ matrix.arch }} \
             -f ${{ env.CONTEXT_DIR }}/gha-runner/default.Containerfile \
             ${{ env.CONTEXT_DIR }}
@@ -282,6 +335,14 @@ jobs:
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
+
+      - name: Sign pushed images (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Default multi-arch manifest ───────────────────────
   manifest-default:
@@ -328,3 +389,11 @@ jobs:
           done
 
           sudo podman manifest rm default-manifest
+
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

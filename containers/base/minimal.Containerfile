@@ -52,7 +52,14 @@ COPY overlay.d/10-hardening/ /mnt/sys-root/
 
 FROM scratch
 ARG VERSION_ID
+LABEL org.opencontainers.image.title="fedora-minimal"
+LABEL org.opencontainers.image.description="Minimal hardened Fedora userspace image for the fjord homelab"
 LABEL org.opencontainers.image.version=${VERSION_ID}
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"
+LABEL org.opencontainers.image.base.name="quay.io/fedora/fedora:latest"
 COPY --from=system-build /mnt/sys-root/ /
 
 CMD ["/bin/bash"]

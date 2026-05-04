@@ -1,0 +1,116 @@
+name: test(cnpg-cluster)
+
+on:
+  pull_request:
+    paths:
+      - 'charts/cnpg-cluster/**'
+      - '.github/workflows/test-cnpg-cluster.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    name: helm lint + template
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: helm lint + smoke template
+        run: make -C charts/cnpg-cluster lint
+
+  test-list:
+    name: list test cases
+    runs-on: ubuntu-24.04
+    outputs:
+      tests: ${{ steps.list.outputs.tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - id: list
+        run: |
+          cd charts/cnpg-cluster/test
+          TESTS=$(find . -mindepth 1 -maxdepth 1 -type d -name '[0-9]*-*' -printf '%P\n' \
+            | sort \
+            | jq -cRn '{ include: [inputs | { test: "\(.)" }] }')
+          echo "tests=${TESTS}" >> "$GITHUB_OUTPUT"
+          echo "${TESTS}"
+
+  test:
+    name: ${{ matrix.test }}
+    needs: [lint, test-list]
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.test-list.outputs.tests) }}
+    env:
+      CHAINSAW_VERSION: v0.2.14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install kind + create cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: cnpg-cluster-test
+          node_image: kindest/node:v1.34.3
+          wait: 120s
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install Chainsaw
+        uses: kyverno/action-install-chainsaw@v0.2.14
+        with:
+          verify: true
+
+      - name: Install prerequisites (cert-manager, CNPG, plugin, MinIO)
+        run: charts/cnpg-cluster/test/support/prereqs-install.sh
+
+      - name: Run chainsaw test
+        env:
+          MATRIX_TEST: ${{ matrix.test }}
+          CHART_DIR: ${{ github.workspace }}/charts/cnpg-cluster
+        run: |
+          chainsaw test \
+            --config charts/cnpg-cluster/test/chainsaw.yaml \
+            "charts/cnpg-cluster/test/${MATRIX_TEST}"
+
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          kubectl get clusters.postgresql.cnpg.io -A -o wide || true
+          kubectl get backups.postgresql.cnpg.io -A -o wide || true
+          kubectl get objectstores.barmancloud.cnpg.io -A -o wide || true
+          kubectl logs -n cnpg-system deploy/cnpg-cloudnative-pg --tail=200 || true
+          kubectl logs -n cnpg-system deploy/plugin-barman-cloud --tail=200 || true

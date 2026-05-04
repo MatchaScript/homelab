@@ -1,0 +1,33 @@
+{{- if .Values.dnsdist.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "powerdns.fullname" . }}-dnsdist
+  labels:
+    {{- include "powerdns.dnsdist.labels" . | nindent 4 }}
+    {{- with .Values.dnsdist.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.dnsdist.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.dnsdist.service.type }}
+  {{- if eq .Values.dnsdist.service.type "ClusterIP" }}
+  {{- if .Values.dnsdist.service.clusterIP }}
+  clusterIP: {{ .Values.dnsdist.service.clusterIP }}
+  {{- end }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.dnsdist.service.port }}
+      targetPort: dns-tcp
+      protocol: TCP
+      name: dns-tcp
+    - port: {{ .Values.dnsdist.service.port }}
+      targetPort: dns-udp
+      protocol: UDP
+      name: dns-udp
+  selector:
+    {{- include "powerdns.dnsdist.selectorLabels" . | nindent 4 }}
+{{- end }}

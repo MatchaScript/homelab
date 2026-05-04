@@ -1,0 +1,41 @@
+{{- if gt (int .Values.replicaCount) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "powerdns.fullname" . }}
+  labels:
+    {{- include "powerdns.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "powerdns.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if and .Values.recursor.enabled (gt (int .Values.recursor.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "powerdns.fullname" . }}-recursor
+  labels:
+    {{- include "powerdns.recursor.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "powerdns.recursor.selectorLabels" . | nindent 6 }}
+{{- end }}
+---
+{{- if and .Values.dnsdist.enabled (gt (int .Values.dnsdist.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "powerdns.fullname" . }}-dnsdist
+  labels:
+    {{- include "powerdns.dnsdist.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      {{- include "powerdns.dnsdist.selectorLabels" . | nindent 6 }}
+{{- end }}

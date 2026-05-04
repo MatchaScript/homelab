@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: streaming-read
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      name: streaming-read
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          # Replicas bootstrapped from an ObjectStore inherit credentials from the
+          # source cluster and don't get their own *-app secret. Use the primary's
+          # credentials but point PGHOST at the replica's read-only service.
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: primary-cnpg-cluster-app
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: primary-cnpg-cluster-app
+                  key: password
+            - name: PGDATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: primary-cnpg-cluster-app
+                  key: dbname
+            - name: PGHOST
+              value: replica-cnpg-cluster-r
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              # Poll for up to 60s — replica catch-up isn't instantaneous.
+              for i in $(seq 1 30); do
+                CNT=$(psql -At -c "SELECT count(*) FROM streaming_probe WHERE id=1;" || echo 0)
+                if [ "$CNT" = "1" ]; then
+                  echo "Replica caught up on iteration $i"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "Replica did not see streaming_probe row"
+              exit 1

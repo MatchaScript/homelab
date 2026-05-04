@@ -1,0 +1,64 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auth-only
+spec:
+  timeouts:
+    apply: 30s
+    assert: 8m
+    cleanup: 2m
+  steps:
+    - name: Apply app-credentials Secret
+      try:
+        - apply:
+            file: ./app-secret.yaml
+
+    - name: Install the powerdns + cnpg-cluster stack
+      try:
+        - script:
+            content: |
+              set -eu
+              # powerdns must be installed first so its schema ConfigMap exists
+              # before the CNPG cluster's initdb runs.
+              helm upgrade --install pdns "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./powerdns-values.yaml
+              helm upgrade --install pdns-db "${CHART_DIR}/../cnpg-cluster" \
+                --namespace "${NAMESPACE}" \
+                --values ./cnpg-cluster-values.yaml \
+                --wait --timeout 8m
+        - assert:
+            file: ./01-stack-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+        - describe:
+            apiVersion: apps/v1
+            kind: Deployment
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns
+
+    - name: Insert a test zone via psql
+      try:
+        - apply:
+            file: ./02-zone-create.yaml
+        - assert:
+            file: ./02-zone-create-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=zone-create
+
+    - name: Resolve a record through the auth server
+      try:
+        - apply:
+            file: ./03-dns-query.yaml
+        - assert:
+            file: ./03-dns-query-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=dns-query
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=zone-create
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns

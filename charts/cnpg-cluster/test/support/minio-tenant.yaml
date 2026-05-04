@@ -1,0 +1,19 @@
+tenant:
+  pools:
+    - servers: 1
+      name: pool0
+      volumesPerServer: 1
+      size: 1Gi
+  buckets:
+    - name: mybucket
+      region: local
+  certificate:
+    requestAutoCert: false
+  # Static credentials so tests can derive a kubernetes Secret deterministically.
+  configuration:
+    name: tenant-config
+  configSecret:
+    name: tenant-config
+    accessKey: minio
+    secretKey: minio123
+    existingSecret: false

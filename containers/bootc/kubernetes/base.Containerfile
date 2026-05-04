@@ -62,5 +62,11 @@ RUN systemctl enable tuned && \
 RUN dnf clean all
 RUN rm /var/{log,cache,lib}/* -rf
 RUN bootc container lint
-LABEL containers.bootc 1
-LABEL ostree.bootable 1
+LABEL containers.bootc=1
+LABEL ostree.bootable=1
+LABEL org.opencontainers.image.title="kubernetes"
+LABEL org.opencontainers.image.description="Kubernetes node bootc image (kubelet, kubeadm, cri-o) for the fjord homelab"
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"

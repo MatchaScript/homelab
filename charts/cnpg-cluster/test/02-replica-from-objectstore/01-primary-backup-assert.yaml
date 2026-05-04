@@ -1,0 +1,6 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: primary-backup-1
+status:
+  phase: completed
