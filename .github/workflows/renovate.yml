@@ -1,0 +1,49 @@
+name: Renovate
+
+on:
+  schedule:
+    # 4時間おきに実行 (UTC)
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      log_level_debug:
+        type: boolean
+        description: "Run Renovate with DEBUG log level"
+        default: false
+      dry_run:
+        type: boolean
+        description: "Dry run (no PRs created)"
+        default: false
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    name: Run self-hosted Renovate
+    runs-on: ubuntu-24.04
+    environment: Renovate
+    permissions:
+      contents: read
+    steps:
+      - name: Get token
+        id: get_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RENOVATE_APP_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Self-hosted Renovate
+        uses: renovatebot/github-action@v46
+        env:
+          LOG_LEVEL: ${{ inputs.log_level_debug && 'debug' || 'info' }}
+          RENOVATE_DRY_RUN: ${{ inputs.dry_run && 'full' || 'null' }}
+        with:
+          # renovate: datasource=github-releases depName=renovatebot/renovate
+          renovate-version: 43.111.3
+          configurationFile: renovate.json
+          token: ${{ steps.get_token.outputs.token }}
