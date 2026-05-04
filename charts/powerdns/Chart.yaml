@@ -3,4 +3,5 @@ name: powerdns
 description: A Helm chart for PowerDNS Authoritative Server (external PostgreSQL backend)
 type: application
 version: 0.1.0
+# renovate: datasource=docker depName=docker.io/powerdns/pdns-auth-50
 appVersion: "5.0"

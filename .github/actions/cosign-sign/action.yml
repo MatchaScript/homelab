@@ -26,7 +26,7 @@ runs:
   using: "composite"
   steps:
     - name: Install cosign
-      uses: sigstore/cosign-installer@v3
+      uses: sigstore/cosign-installer@v4.1.1
       with:
         cosign-release: ${{ inputs.cosign_version }}
 
@@ -38,6 +38,7 @@ runs:
         REG_PASSWORD: ${{ inputs.registry_password }}
         REGISTRY: ${{ inputs.registry }}
         COSIGN_YES: "true"
+        COSIGN_EXPERIMENTAL: "1"
       run: |
         set -euo pipefail
 
@@ -52,7 +53,7 @@ runs:
         for ref in $REF_LIST; do
           [ -z "$ref" ] && continue
           echo "==> cosign sign --yes $ref"
-          cosign sign --yes --recursive --registry-referrers-mode oci-1.1 "$ref"
+          cosign sign --yes --recursive --registry-referrers-mode oci-1-1 "$ref"
           signed=$((signed + 1))
         done
 

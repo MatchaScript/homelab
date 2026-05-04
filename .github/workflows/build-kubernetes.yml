@@ -51,7 +51,7 @@ jobs:
       registry: ${{ steps.set_registry.outputs.registry }}
       can_push: ${{ steps.set_push.outputs.can_push }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -119,7 +119,7 @@ jobs:
     outputs:
       kubelet_version: ${{ steps.detect_kubelet.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -223,7 +223,7 @@ jobs:
     needs: [prepare, build-amd64-base]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -313,7 +313,7 @@ jobs:
     needs: [prepare, build-amd64-base]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -404,7 +404,7 @@ jobs:
     outputs:
       kubelet_version: ${{ steps.detect_kubelet.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman

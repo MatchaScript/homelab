@@ -1,0 +1,168 @@
+name: publish(charts)
+
+on:
+  push:
+    branches: [main, devel]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/publish-charts.yml'
+  workflow_dispatch:
+    inputs:
+      charts:
+        description: "Comma-separated chart names to force-publish (default: detect from diff)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  detect-changes:
+    name: Detect changed charts
+    runs-on: ubuntu-24.04
+    outputs:
+      charts: ${{ steps.collect.outputs.charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Filter by chart path
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            cnpg-cluster:
+              - 'charts/cnpg-cluster/**'
+            keycloak:
+              - 'charts/keycloak/**'
+            powerdns:
+              - 'charts/powerdns/**'
+
+      - name: Collect chart list
+        id: collect
+        env:
+          MANUAL_CHARTS: ${{ inputs.charts }}
+          DETECTED_CHARTS: ${{ steps.filter.outputs.changes }}
+        run: |
+          set -euo pipefail
+          if [ -n "${MANUAL_CHARTS}" ]; then
+            CHARTS=$(echo "${MANUAL_CHARTS}" | tr ',' '\n' | sed '/^$/d' | jq -R . | jq -cs .)
+          else
+            CHARTS="${DETECTED_CHARTS}"
+          fi
+          echo "charts=${CHARTS}" >> "$GITHUB_OUTPUT"
+          echo "Selected charts: ${CHARTS}"
+
+  publish:
+    name: Publish ${{ matrix.chart }}
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.charts != '[]' && needs.detect-changes.outputs.charts != '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJson(needs.detect-changes.outputs.charts) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v3.16.2
+
+      - name: Lint chart
+        run: |
+          set -euo pipefail
+          helm lint charts/${{ matrix.chart }}
+
+      - name: Compute publish version
+        id: ver
+        env:
+          BRANCH: ${{ github.ref_name }}
+          CHART: ${{ matrix.chart }}
+        run: |
+          set -euo pipefail
+          BASE=$(yq '.version' "charts/${CHART}/Chart.yaml")
+          if [ "${BRANCH}" = "devel" ]; then
+            DATE=$(TZ=Asia/Tokyo date +'%Y%m%d')
+            VERSION="${BASE}-devel.${DATE}"
+          else
+            VERSION="${BASE}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${CHART} as ${VERSION}"
+
+      - name: Rewrite Chart.yaml version (devel only, not committed)
+        if: ${{ github.ref_name == 'devel' }}
+        env:
+          CHART: ${{ matrix.chart }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          yq -i '.version = strenv(VERSION)' "charts/${CHART}/Chart.yaml"
+
+      - name: Package chart
+        env:
+          CHART: ${{ matrix.chart }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          helm package "charts/${CHART}" -d dist/
+
+      - name: Login to GHCR
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${REGISTRY_PASSWORD}" | helm registry login ghcr.io -u "${REGISTRY_USER}" --password-stdin
+
+      - name: Push chart and capture digest
+        id: push
+        env:
+          CHART: ${{ matrix.chart }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          PKG="dist/${CHART}-${VERSION}.tgz"
+          test -f "${PKG}" || { echo "Package not found: ${PKG}"; ls -la dist/; exit 1; }
+
+          # helm push writes "Pushed: ..." and "Digest: sha256:..." to stderr in v3.x.
+          # Tee both streams so we can parse and still surface output in the log.
+          OUT=$(helm push "${PKG}" oci://ghcr.io/matchascript/charts 2>&1 | tee /dev/stderr)
+          DIGEST=$(echo "${OUT}" | awk '/^Digest:/ {print $2; exit}')
+          if [ -z "${DIGEST}" ] || [[ "${DIGEST}" != sha256:* ]]; then
+            echo "Failed to extract a sha256 digest from helm push output. Got: '${DIGEST}'"
+            echo "--- helm push output ---"
+            echo "${OUT}"
+            echo "--- end helm push output ---"
+            exit 1
+          fi
+          REF="ghcr.io/matchascript/charts/${CHART}@${DIGEST}"
+          echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+          echo "Pushed and resolved: ${REF}"
+
+      - name: Sign with cosign (keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.push.outputs.ref }}
+          registry: ghcr.io
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
