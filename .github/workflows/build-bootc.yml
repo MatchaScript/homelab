@@ -54,7 +54,7 @@ jobs:
       registry: ${{ steps.set_registry.outputs.registry }}
       can_push: ${{ steps.set_push.outputs.can_push }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -123,7 +123,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -211,7 +211,7 @@ jobs:
     needs: [prepare, build-base]
     if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'base' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -268,7 +268,7 @@ jobs:
     needs: [prepare, manifest-base]
     if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'hyperv' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
@@ -356,7 +356,7 @@ jobs:
     needs: prepare
     if: ${{ inputs.build_type == 'all' || inputs.build_type == 'asahi' || github.event_name == 'schedule' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
