@@ -1,0 +1,17 @@
+mode: standalone
+
+cluster:
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+  initdb:
+    database: keycloak
+    owner: keycloak
+
+backups:
+  enabled: false

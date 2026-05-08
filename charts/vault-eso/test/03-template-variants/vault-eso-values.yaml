@@ -1,0 +1,39 @@
+secretStore:
+  enabled: true
+  name: vault
+  vault:
+    server: "http://vault.vault.svc:8200"
+    namespace: ""
+    path: secret
+    version: v2
+    auth:
+      mountPath: kubernetes
+      role: placeholder
+
+externalSecrets:
+  # Templated kubernetes.io/basic-auth Secret with mergePolicy: Replace,
+  # exercising the full template{,.metadata,.data} block in templates/externalsecret.yaml.
+  - name: basic-auth-creds
+    refreshInterval: 30s
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      type: kubernetes.io/basic-auth
+      mergePolicy: Replace
+      metadata:
+        labels:
+          example.com/auth-flavour: basic
+        annotations:
+          example.com/source: vault-eso-test
+      data:
+        username: "{{ .username }}"
+        password: "{{ .password }}"
+    data:
+      - secretKey: username
+        remoteRef:
+          key: services/templated/cred
+          property: username
+      - secretKey: password
+        remoteRef:
+          key: services/templated/cred
+          property: password

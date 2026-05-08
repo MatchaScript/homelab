@@ -47,6 +47,8 @@ jobs:
               - 'charts/keycloak/**'
             powerdns:
               - 'charts/powerdns/**'
+            vault-eso:
+              - 'charts/vault-eso/**'
 
       - name: Collect chart list
         id: collect

@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eso
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: vault
+status:
+  conditions:
+    - type: Ready
+      status: "True"

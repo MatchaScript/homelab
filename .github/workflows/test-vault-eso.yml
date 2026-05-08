@@ -1,10 +1,10 @@
-name: test(cnpg-cluster)
+name: test(vault-eso)
 
 on:
   pull_request:
     paths:
-      - 'charts/cnpg-cluster/**'
-      - '.github/workflows/test-cnpg-cluster.yml'
+      - 'charts/vault-eso/**'
+      - '.github/workflows/test-vault-eso.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
           version: v3.16.2
 
       - name: helm lint + smoke template
-        run: make -C charts/cnpg-cluster lint
+        run: make -C charts/vault-eso lint
 
   test-list:
     name: list test cases
@@ -49,7 +49,7 @@ jobs:
 
       - id: list
         run: |
-          cd charts/cnpg-cluster/test
+          cd charts/vault-eso/test
           TESTS=$(find . -mindepth 1 -maxdepth 1 -type d -name '[0-9]*-*' -printf '%P\n' \
             | sort \
             | jq -cRn '{ include: [inputs | { test: "\(.)" }] }')
@@ -64,7 +64,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.test-list.outputs.tests) }}
     env:
-      CHAINSAW_VERSION: v0.2.14
+      CHAINSAW_VERSION: v0.2.15
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -82,7 +82,7 @@ jobs:
       - name: Install kind + create cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
-          cluster_name: cnpg-cluster-test
+          cluster_name: vault-eso-test
           node_image: kindest/node:v1.34.3
           wait: 120s
 
@@ -94,23 +94,24 @@ jobs:
         with:
           verify: true
 
-      - name: Install prerequisites (cert-manager, CNPG, plugin, MinIO)
-        run: charts/cnpg-cluster/test/support/prereqs-install.sh
+      - name: Install prerequisites (external-secrets, Vault dev mode)
+        run: charts/vault-eso/test/support/prereqs-install.sh
 
       - name: Run chainsaw test
         env:
           MATRIX_TEST: ${{ matrix.test }}
-          CHART_DIR: ${{ github.workspace }}/charts/cnpg-cluster
+          CHART_DIR: ${{ github.workspace }}/charts/vault-eso
         run: |
           chainsaw test \
-            --config charts/cnpg-cluster/test/chainsaw.yaml \
-            "charts/cnpg-cluster/test/${MATRIX_TEST}"
+            --config charts/vault-eso/test/chainsaw.yaml \
+            "charts/vault-eso/test/${MATRIX_TEST}"
 
       - name: Dump cluster state on failure
         if: failure()
         run: |
-          kubectl get clusters.postgresql.cnpg.io -A -o wide || true
-          kubectl get backups.postgresql.cnpg.io -A -o wide || true
-          kubectl get objectstores.barmancloud.cnpg.io -A -o wide || true
-          kubectl logs -n cnpg-system deploy/cnpg-cloudnative-pg --tail=200 || true
-          kubectl logs -n cnpg-system deploy/plugin-barman-cloud --tail=200 || true
+          kubectl get secretstores.external-secrets.io -A -o wide || true
+          kubectl get externalsecrets.external-secrets.io -A -o wide || true
+          kubectl get secrets -A || true
+          kubectl logs -n external-secrets -l app.kubernetes.io/name=external-secrets --tail=200 || true
+          kubectl logs -n vault statefulset/vault --tail=200 || true
+          kubectl get pods -A -o wide || true

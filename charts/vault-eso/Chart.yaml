@@ -1,0 +1,25 @@
+apiVersion: v2
+name: vault-eso
+description: |
+  Wires External Secrets Operator (ESO) to a HashiCorp Vault / OpenBao server
+  using the Kubernetes auth method. Renders a SecretStore (or
+  ClusterSecretStore), the ServiceAccount used for token review, and a
+  declarative list of ExternalSecret resources (with optional templating and
+  merge policy). Deployment of ESO and Vault themselves is out of scope —
+  this chart only renders the glue resources that consume them.
+type: application
+version: 0.2.0
+kubeVersion: ">=1.30.0-0"
+home: https://github.com/MatchaScript/homelab
+sources:
+  - https://github.com/MatchaScript/homelab
+  - https://github.com/MatchaScript/infrastructure
+keywords:
+  - external-secrets
+  - eso
+  - vault
+  - openbao
+  - secrets
+maintainers:
+  - name: MatchaScript
+    url: https://github.com/MatchaScript

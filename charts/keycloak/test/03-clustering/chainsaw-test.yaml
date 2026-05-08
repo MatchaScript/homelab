@@ -1,0 +1,52 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: clustering
+spec:
+  timeouts:
+    apply: 30s
+    assert: 10m
+    cleanup: 2m
+  steps:
+    - name: Apply bootstrap-admin Secret
+      try:
+        - apply:
+            file: ./00-bootstrap-secret.yaml
+
+    - name: Install the cnpg-cluster + keycloak stack with replicas=2
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade --install keycloak-db "${CHART_DIR}/../cnpg-cluster" \
+                --namespace "${NAMESPACE}" \
+                --values ./01-cnpg-values.yaml \
+                --wait --timeout 8m
+              helm upgrade --install keycloak "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./01-keycloak-values.yaml \
+                --wait --timeout 10m
+        - assert:
+            file: ./01-stack-assert.yaml
+      catch:
+        - describe:
+            apiVersion: apps/v1
+            kind: Deployment
+        - describe:
+            apiVersion: v1
+            kind: Endpoints
+            name: keycloak-service
+        - podLogs:
+            selector: app=keycloak
+
+    - name: Verify the JGroups view contains both pods
+      try:
+        - apply:
+            file: ./02-cluster-view.yaml
+        - assert:
+            file: ./02-cluster-view-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=cluster-view
+        - podLogs:
+            selector: app=keycloak

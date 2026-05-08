@@ -1,0 +1,31 @@
+replicas: 2
+
+userNamespaces: false
+
+postgresql:
+  host: keycloak-db-cnpg-cluster-rw
+  database: keycloak
+  credentialsSecret: keycloak-db-cnpg-cluster-app
+
+admin:
+  username: admin
+  bootstrapSecret: keycloak-bootstrap-admin
+  bootstrapPasswordKey: keycloak-bootstrap-admin-password
+
+hostname:
+  public: https://accounts.keycloak.test
+  admin: https://admin.keycloak.test
+
+ingress:
+  enabled: false
+
+cache:
+  stack: kubernetes
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    cpu: 1
+    memory: 1024Mi

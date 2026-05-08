@@ -1,0 +1,51 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: secret-roundtrip
+spec:
+  timeouts:
+    apply: 30s
+    assert: 5m
+    cleanup: 2m
+  steps:
+    - name: Seed Vault KV + configure Kubernetes-auth role
+      try:
+        - script:
+            content: |
+              set -eu
+              ROLE="vault-eso-roundtrip-${NAMESPACE}"
+              kubectl -n vault exec statefulset/vault -- sh -eu -c "
+                export VAULT_TOKEN=root
+                export VAULT_ADDR=http://127.0.0.1:8200
+                vault kv put secret/services/roundtrip/cred \
+                  password='s3cret-pw' \
+                  api_token='tok-XYZ-123'
+                vault write auth/kubernetes/role/${ROLE} \
+                  bound_service_account_names=eso \
+                  bound_service_account_namespaces=${NAMESPACE} \
+                  policies=vault-eso-test \
+                  ttl=1h
+              "
+
+    - name: Install vault-eso (SecretStore + ExternalSecret roundtrip)
+      try:
+        - script:
+            content: |
+              set -eu
+              ROLE="vault-eso-roundtrip-${NAMESPACE}"
+              helm upgrade --install ve "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./vault-eso-values.yaml \
+                --set "secretStore.vault.auth.role=${ROLE}"
+        - assert:
+            file: ./01-roundtrip-assert.yaml
+      catch:
+        - describe:
+            apiVersion: external-secrets.io/v1
+            kind: SecretStore
+        - describe:
+            apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+        - podLogs:
+            namespace: external-secrets
+            selector: app.kubernetes.io/name=external-secrets

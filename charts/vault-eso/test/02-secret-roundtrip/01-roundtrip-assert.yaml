@@ -1,0 +1,28 @@
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: vault
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: app-credentials
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+# Verify the operator materialised a v1/Secret with the expected values
+# (base64('s3cret-pw') == czNjcmV0LXB3, base64('tok-XYZ-123') == dG9rLVhZWi0xMjM=).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-credentials
+data:
+  password: czNjcmV0LXB3
+  api_token: dG9rLVhZWi0xMjM=
