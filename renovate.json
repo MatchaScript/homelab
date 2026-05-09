@@ -21,6 +21,16 @@
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s*depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+appVersion:\\s*[\"']?(?<currentValue>.+?)[\"']?\\s"
       ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/)kustomize/[^/]+/kustomization\\.yaml$"
+      ],
+      "matchStrings": [
+        "raw\\.githubusercontent\\.com/(?<depName>[^/]+/[^/]+)/(?<currentValue>[^/]+)/"
+      ],
+      "datasourceTemplate": "github-tags"
     }
   ],
   "packageRules": [
