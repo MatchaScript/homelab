@@ -20,7 +20,7 @@ export KIND_NODE_IMAGE
 export CERT_MANAGER_VERSION CNPG_VERSION PLUGIN_BARMAN_VERSION
 export PROM_CRDS_VERSION MINIO_OPERATOR_VERSION MINIO_TENANT_VERSION
 
-.PHONY: help test test-up test-down test-fresh prereqs lint template
+.PHONY: help test test-up test-down test-fresh prereqs lint lint-prom template
 
 help:
 	@echo "Targets:"
@@ -30,6 +30,7 @@ help:
 	@echo "  make test-fresh    - test-down + test"
 	@echo "  make prereqs       - re-run prereqs-install.sh against the current cluster"
 	@echo "  make lint          - helm lint + helm template smoke checks"
+	@echo "  make lint-prom     - render PrometheusRule and validate via promtool"
 
 test: test-up
 	chainsaw test --config $(TEST_DIR)/chainsaw.yaml $(TEST_DIR)
@@ -60,6 +61,9 @@ lint:
 	  --values $(TEST_DIR)/02-replica-from-objectstore/02-replica.yaml >/dev/null
 	helm template lint-scheduled $(CHART_DIR) \
 	  --values $(TEST_DIR)/03-scheduled-backup/01-cluster.yaml >/dev/null
+
+lint-prom:
+	$(TEST_DIR)/support/lint-prometheus-rules.sh
 
 template:
 	helm template smoke $(CHART_DIR) \
