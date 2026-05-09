@@ -42,7 +42,7 @@ Configuration
   {{- end -}}
 {{- end -}}
 
-{{- $image := include "cluster.imageName" . -}}
+{{- $image := default "(operator default)" (include "cluster.imageName" .) -}}
 
 ╭───────────────────┬──────────────────────────────────────────────────────────╮
 │ Configuration     │ Value                                                    │

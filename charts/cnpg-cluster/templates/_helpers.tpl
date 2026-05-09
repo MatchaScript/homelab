@@ -45,28 +45,29 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/part-of: cloudnative-pg
 {{- end }}
 
-{{- define "cluster.postgresqlMajor" -}}
-{{ index (regexSplit "\\." (toString .Values.version.postgresql) 2) 0 }}
-{{- end -}}
-
 {{/*
-Cluster Image Name. Honours .Values.cluster.imageName if set; otherwise uses the upstream
-cloudnative-pg/postgresql image at .Values.version.postgresql.
+Cluster Image Name. Honours .Values.cluster.imageName if set; otherwise builds the upstream
+cloudnative-pg/postgresql image from .Values.version.postgresql. Returns an empty string when
+neither is set, so the operator's built-in default image is used.
 */}}
 {{- define "cluster.imageName" -}}
     {{- if .Values.cluster.imageName -}}
         {{- .Values.cluster.imageName -}}
-    {{- else -}}
+    {{- else if .Values.version.postgresql -}}
         {{- printf "ghcr.io/cloudnative-pg/postgresql:%s" .Values.version.postgresql -}}
     {{- end }}
 {{- end -}}
 
 {{/*
-Cluster Image stanza (returns `imageName: ...`). Plain field — no ImageCatalogRef support.
+Cluster Image stanza. Emits `imageName:` only when a value is resolved; otherwise emits nothing
+so the CNPG operator falls back to its own default image.
 */}}
-{{- define "cluster.image" }}
-imageName: {{ include "cluster.imageName" . }}
+{{- define "cluster.image" -}}
+{{- $image := include "cluster.imageName" . -}}
+{{- if $image }}
+imageName: {{ $image }}
 {{- end }}
+{{- end -}}
 
 {{- define "cluster.postgresUID" -}}
   {{- if ge (int .Values.cluster.postgresUID) 0 -}}

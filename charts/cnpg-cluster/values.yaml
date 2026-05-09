@@ -6,8 +6,9 @@ fullnameOverride: ""
 namespaceOverride: ""
 
 version:
-  # -- PostgreSQL major version to use
-  postgresql: "16"
+  # -- PostgreSQL major version. Leave empty to let the CNPG operator pick its built-in
+  # default image. Overridden entirely by `cluster.imageName` when that is set.
+  postgresql: ""
 
 ###
 # -- Cluster mode of operation. Available modes:
