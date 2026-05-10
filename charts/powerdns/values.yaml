@@ -8,13 +8,13 @@ image:
   repository: docker.io/powerdns/pdns-auth-50
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest"
+  tag: "latest@sha256:fde7df53dfd1eeeda5c3605465628b27ca08b986d7d4d0f55b70d57213bbad08"
 
 # Image used by the credentials init container. Needs sh + redirection only.
 initContainer:
   image:
     repository: ghcr.io/matchascript/fedora
-    tag: "micro"
+    tag: "micro@sha256:ccff476bcbc8890e5ef14b8f6e18135370c8151a91102c3297500ec565266c86"
     pullPolicy: IfNotPresent
 
 # Image used by the init container that waits for the database TCP port to open.
@@ -23,7 +23,7 @@ initContainer:
 waitForDb:
   image:
     repository: docker.io/library/busybox
-    tag: "1.37"
+    tag: "1.37@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e"
     pullPolicy: IfNotPresent
 
 nameOverride: ""
@@ -95,7 +95,7 @@ recursor:
   image:
     repository: docker.io/powerdns/pdns-recursor-51
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "latest@sha256:8b726b17f97c4bf3cf1c7b357951e2552cd8a813e1de39aa5e10db5a9753c61b"
   service:
     type: ClusterIP
     port: 53
@@ -125,7 +125,7 @@ dnsdist:
   image:
     repository: docker.io/powerdns/dnsdist-21
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "latest@sha256:d30076121ce424f056770318da266d55998fea1c4982d6de3b4e050c2652329e"
   service:
     type: ClusterIP
     # Note: If dnsdist is exposed with a LoadBalancer, this usually becomes LoadBalancer.
