@@ -23,8 +23,7 @@ jobs:
     name: helm lint + template
     runs-on: ubuntu-24.04
     env:
-      PROMTOOL_VERSION: "3.0.1"
-      YQ_VERSION: "v4.47.1"
+      PROMETHEUS_IMAGE: prom/prometheus:v3.0.1
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -39,18 +38,14 @@ jobs:
       - name: Install yq + promtool
         run: |
           set -euo pipefail
-          sudo curl -sSL -o /usr/local/bin/yq \
-            "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
-          sudo chmod +x /usr/local/bin/yq
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends yq
           yq --version
 
-          tmp="$(mktemp -d)"
-          curl -sSL \
-            "https://github.com/prometheus/prometheus/releases/download/v${PROMTOOL_VERSION}/prometheus-${PROMTOOL_VERSION}.linux-amd64.tar.gz" \
-            | tar -xz -C "$tmp"
-          sudo install -m 0755 \
-            "$tmp/prometheus-${PROMTOOL_VERSION}.linux-amd64/promtool" \
-            /usr/local/bin/promtool
+          cid="$(docker create "$PROMETHEUS_IMAGE")"
+          docker cp "$cid:/bin/promtool" /tmp/promtool
+          docker rm "$cid"
+          sudo install -m 0755 /tmp/promtool /usr/local/bin/promtool
           promtool --version | head -1
 
       - name: helm lint + smoke template
