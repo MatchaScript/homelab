@@ -5,7 +5,7 @@
     "docker:pinDigests",
     "helpers:pinGitHubActionDigests"
   ],
-  "baseBranches": ["devel"],
+  "baseBranches": ["main"],
   "dockerfile": {
     "fileMatch": [
       "(^|/|\\.)Containerfile$",
