@@ -1,9 +1,9 @@
 # Global build arguments
-ARG SYSBASE=ghcr.io/matchascript/fedora-bootc:latest
+ARG SYSBASE=ghcr.io/matchascript/fedora-bootc:latest@sha256:10e934375e2ebb658ed66c28a776c92ed6130a18c0823e1c51f350eb7c822eac
 ARG KUBEADM_VERSION="v1.35"
 
 # Stage 1: Download kubeadm binary
-FROM registry.fedoraproject.org/fedora-minimal:latest AS kubeadm-downloader
+FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:fb3f9c67f0aefa3d7a9f63fd8c3f373c86df57efb0128ee1fe6bf461bc803534 AS kubeadm-downloader
 ARG KUBEADM_VERSION
 ARG TARGETARCH # arm64 or amd64
 RUN microdnf install -y curl && \

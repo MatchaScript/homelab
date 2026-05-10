@@ -1,4 +1,4 @@
-ARG SYSBASE=quay.io/fedora/fedora:latest
+ARG SYSBASE=quay.io/fedora/fedora:latest@sha256:cf44ad589742ddc8a05a4a655fcd17f42b378dd202eff925dfd54ce1a37ce76f
 FROM ${SYSBASE} AS system-build
 ARG TARGETARCH='amd64'
 ARG TARGETOS='linux'
