@@ -43,8 +43,6 @@ jobs:
           filters: |
             cnpg-cluster:
               - 'charts/cnpg-cluster/**'
-            keycloak:
-              - 'charts/keycloak/**'
             powerdns:
               - 'charts/powerdns/**'
             vault-eso:
