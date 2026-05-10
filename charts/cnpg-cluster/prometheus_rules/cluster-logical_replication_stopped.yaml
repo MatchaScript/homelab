@@ -12,13 +12,29 @@ annotations:
   runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/{{ $alert }}.md
 expr: |
   (
-    # Subscription is explicitly disabled
-    label_replace(max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled), "cluster", "$1", "job", ".+/(.+)") == 0
-  ) or (
-    # Subscription is enabled but stuck (no worker process with significant lag)
-    label_replace(max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled), "cluster", "$1", "job", ".+/(.+)") == 1
-    and label_replace(max by (namespace, job, subname) (cnpg_pg_stat_subscription_pid), "cluster", "$1", "job", ".+/(.+)") == ""
-    and label_replace(max by (namespace, job, subname) (cnpg_pg_stat_subscription_buffered_lag_bytes), "cluster", "$1", "job", ".+/(.+)") / 1024^3 > 0.1
+    # Explicitly disabled
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled),
+      "cluster", "$1", "job", ".+/(.+)"
+    ) == 0
+  )
+  or
+  (
+    # Enabled but no worker AND meaningful lag
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled == 1),
+      "cluster", "$1", "job", ".+/(.+)"
+    )
+    unless on (namespace, job, subname, cluster)
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_pid > 0),
+      "cluster", "$1", "job", ".+/(.+)"
+    )
+    and on (namespace, job, subname, cluster)
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_buffered_lag_bytes),
+      "cluster", "$1", "job", ".+/(.+)"
+    ) > 1024*1024*100
   )
 for: 5m
 labels:

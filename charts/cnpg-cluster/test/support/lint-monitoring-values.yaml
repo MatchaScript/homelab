@@ -1,23 +1,7 @@
 # Lint-only values for `make lint-prom`. Enables monitoring so the
-# PrometheusRule renders, then opts out of four rules inherited from
-# cloudnative-pg/charts (cluster v0.6.0) that fail `promtool check rules`:
-#
-#   - LogicalReplicationErrors{,Critical}: `increase((a + b)[5m])` applies a
-#     range to expression output. PromQL only allows ranges on vector
-#     selectors — needs a subquery (`[5m:]`).
-#   - LogicalReplicationStopped{,Critical}: compares an instant-vector against
-#     a string literal (`metric == ""`). Binary ops require scalar/instant
-#     vector on both sides.
-#
-# Exclusions are scoped to the lint test only, so regressions on every other
-# rule are still caught. Fixing the upstream bugs is tracked separately.
+# PrometheusRule renders, then runs `promtool check rules` against the result.
 cluster:
   monitoring:
     enabled: true
     prometheusRule:
       enabled: true
-      excludeRules:
-        - CNPGClusterLogicalReplicationErrorsCritical
-        - CNPGClusterLogicalReplicationErrors
-        - CNPGClusterLogicalReplicationStoppedCritical
-        - CNPGClusterLogicalReplicationStopped

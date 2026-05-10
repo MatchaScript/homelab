@@ -9,7 +9,7 @@ description: Deploys a CloudNativePG cluster wired to the barman-cloud plugin (O
 kubeVersion: ">=1.29.0-0"
 icon: https://raw.githubusercontent.com/cloudnative-pg/artwork/main/cloudnativepg-logo.svg
 type: application
-version: 0.2.1
+version: 0.2.2
 sources:
   - https://github.com/MatchaScript/homelab
   - https://github.com/cloudnative-pg/charts
