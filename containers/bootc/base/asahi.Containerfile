@@ -26,7 +26,7 @@ EOF
 LABEL containers.bootc=1
 LABEL ostree.bootable=1
 LABEL org.opencontainers.image.title="asahi-bootc"
-LABEL org.opencontainers.image.description="Fedora Asahi bootc base image for Apple Silicon (arm64) in the fjord homelab"
+LABEL org.opencontainers.image.description="Fedora Asahi bootc base image for Apple Silicon (arm64) homelab nodes"
 LABEL org.opencontainers.image.version="${VERSION_ID}"
 LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
 LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"

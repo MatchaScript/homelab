@@ -14,7 +14,7 @@ EOF
 LABEL containers.bootc=1
 LABEL ostree.bootable=1
 LABEL org.opencontainers.image.title="fedora-bootc"
-LABEL org.opencontainers.image.description="Fedora bootc base image for the fjord homelab"
+LABEL org.opencontainers.image.description="Fedora bootc base image for a homelab cluster"
 LABEL org.opencontainers.image.version="${VERSION_ID}"
 LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
 LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"

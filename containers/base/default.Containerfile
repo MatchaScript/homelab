@@ -68,7 +68,7 @@ FROM scratch
 COPY --from=stage2 / /
 ARG VERSION_ID
 LABEL org.opencontainers.image.title="fedora"
-LABEL org.opencontainers.image.description="Minimal Fedora userspace image (default variant) for the fjord homelab"
+LABEL org.opencontainers.image.description="Minimal Fedora userspace image (default variant) for a homelab cluster"
 LABEL org.opencontainers.image.version=${VERSION_ID}
 LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
 LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"

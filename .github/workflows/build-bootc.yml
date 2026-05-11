@@ -143,7 +143,7 @@ jobs:
         uses: ./.github/actions/oci-labels
         with:
           title: ${{ env.FEDORA_IMAGE }}
-          description: "Fedora bootc base image for the fjord homelab"
+          description: "Fedora bootc base image for a homelab cluster"
           version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
           base_name: ${{ env.BOOTC_BASE }}
 

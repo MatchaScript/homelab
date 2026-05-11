@@ -169,7 +169,7 @@ jobs:
         uses: ./.github/actions/oci-labels
         with:
           title: "fedora-${{ matrix.variant }}"
-          description: "Fedora userspace image (${{ matrix.variant }} variant) for the fjord homelab"
+          description: "Fedora userspace image (${{ matrix.variant }} variant) for a homelab cluster"
           version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
           base_name: ${{ env.SYSBASE }}
 

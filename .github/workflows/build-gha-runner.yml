@@ -112,7 +112,7 @@ jobs:
         uses: ./.github/actions/oci-labels
         with:
           title: ${{ env.SLIM_IMAGE }}
-          description: "Slim Actions Runner Controller (ARC) image for the fjord homelab"
+          description: "Slim Actions Runner Controller (ARC) image for a homelab cluster"
           version: ${{ needs.prepare.outputs.current_date }}
           base_name: ${{ env.FEDORA_BASE }}
 
@@ -274,7 +274,7 @@ jobs:
         uses: ./.github/actions/oci-labels
         with:
           title: ${{ env.DEFAULT_IMAGE }}
-          description: "Default Actions Runner Controller (ARC) image with build toolchains for the fjord homelab"
+          description: "Default Actions Runner Controller (ARC) image with build toolchains for a homelab cluster"
           version: ${{ needs.prepare.outputs.current_date }}
           base_name: "${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.SLIM_IMAGE }}"
 

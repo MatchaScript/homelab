@@ -8,12 +8,12 @@ to the [`barman-cloud` plugin][barman-plugin] for WAL archiving and
 backups via an `ObjectStore` custom resource.
 
 This chart is **not** intended for general consumption — it tracks the
-needs of the [`fjord` homelab cluster][fjord-readme] and intentionally
+needs of [this homelab cluster][homelab-readme] and intentionally
 exposes a narrower surface than the upstream chart it was forked from.
 
 [cnpg]: https://cloudnative-pg.io/
 [barman-plugin]: https://github.com/cloudnative-pg/plugin-barman-cloud
-[fjord-readme]: ../../README.md
+[homelab-readme]: ../../README.md
 
 ## Fork notice
 
@@ -72,8 +72,8 @@ helm upgrade --install <release> \
   ./homelab/charts/cnpg-cluster
 ```
 
-In the `fjord` cluster the chart is consumed via ArgoCD, with
-per-instance overrides under `clusters/japan-east-fjord-1a/<app>/`.
+In practice the chart is consumed via ArgoCD, with per-instance
+overrides held alongside each application's manifests.
 
 ## Values
 

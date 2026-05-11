@@ -86,7 +86,7 @@ ENV RUNNER_MANUALLY_TRAP_SIG=1 \
     LANG=C.utf8
 
 LABEL org.opencontainers.image.title="gha-runner-slim"
-LABEL org.opencontainers.image.description="Slim Actions Runner Controller (ARC) image for the fjord homelab"
+LABEL org.opencontainers.image.description="Slim Actions Runner Controller (ARC) image for a homelab cluster"
 LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
 LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
 LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
