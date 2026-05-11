@@ -1,4 +1,4 @@
-ARG BOOTC_BASE=quay.io/fedora/fedora-bootc:latest@sha256:226100ec19a5d94defd4737a26a29bee3c24a9f9ddeca56092049c847d911f3b
+ARG BOOTC_BASE=quay.io/fedora/fedora-bootc:latest@sha256:7daaad39fac6b23bcdfabd3cd09c3057b5884bee323b20424d04991766f1f382
 FROM ${BOOTC_BASE}
 ARG VERSION_ID
 RUN dnf install -y hyperv-daemons && \
