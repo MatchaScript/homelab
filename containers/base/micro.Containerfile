@@ -1,4 +1,4 @@
-ARG SYSBASE=quay.io/fedora/fedora:latest@sha256:cf44ad589742ddc8a05a4a655fcd17f42b378dd202eff925dfd54ce1a37ce76f
+ARG SYSBASE=quay.io/fedora/fedora:latest@sha256:fe9ef21b59ac8e2e9510e352fa9d38f3bd171bf821a96f6b27918f78979db654
 FROM ${SYSBASE} AS system-build
 RUN --mount=type=cache,target=/var/cache/dnf \
     source /etc/os-release; \
