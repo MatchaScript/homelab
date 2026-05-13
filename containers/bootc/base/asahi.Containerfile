@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora-bootc:latest@sha256:7808df8be42453623448669e80e762adfe2ff6d74b26505d610d16acfadb6b98 AS builder
+FROM quay.io/fedora/fedora-bootc:latest@sha256:cf43a66c464a71c08f479a834716d54a94830001aecaef7e9e23d7c5ef1c4dfd AS builder
 # https://gitlab.com/fedora/bootc/base-images/-/issues/49
 ARG TARGETARCH='arm64'
 COPY overlay.d/99-asahi-builder/ /
