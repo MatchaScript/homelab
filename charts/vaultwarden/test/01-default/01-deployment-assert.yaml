@@ -1,0 +1,28 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vw-deployment
+  labels:
+    app: vaultwarden
+status:
+  (availableReplicas > `0`): true
+  (conditions[?type == 'Available'] | [0].status): "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vw-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vw-pvc
+status:
+  phase: Bound

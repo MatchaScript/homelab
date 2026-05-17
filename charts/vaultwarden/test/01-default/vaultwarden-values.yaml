@@ -1,0 +1,18 @@
+# Minimal values for the smoke-deploy test: ClusterIP service, default PVC
+# backed by kind's local-path-provisioner, no Ingress, no SSO. The test
+# verifies the rendered Deployment becomes Ready and serves /alive.
+
+# Namespace is set per-test by chainsaw via --namespace; let the chart
+# inherit that by leaving namespace unset so we don't deploy across ns.
+namespace: ""
+
+env:
+  SIGNUPS_ALLOWED: "true"
+  DOMAIN: ""
+  ROCKET_PORT: "8080"
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  storageClass: standard

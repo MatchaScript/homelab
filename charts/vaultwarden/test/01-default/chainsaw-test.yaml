@@ -1,0 +1,51 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default
+spec:
+  timeouts:
+    apply: 30s
+    assert: 5m
+    cleanup: 2m
+    exec: 5m
+  steps:
+    - name: Install vaultwarden (defaults, ClusterIP, local-path PVC)
+      try:
+        - script:
+            content: |
+              set -eu
+              # Don't --wait here; image pull on a cold kind node easily blows
+              # past helm's wait budget. The assert step has its own 5m budget
+              # against the Deployment's Available condition.
+              helm upgrade --install vw "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./vaultwarden-values.yaml \
+                --set "namespace=${NAMESPACE}"
+        - assert:
+            file: ./01-deployment-assert.yaml
+      catch:
+        - describe:
+            apiVersion: apps/v1
+            kind: Deployment
+        - describe:
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+        - podLogs:
+            selector: app=vaultwarden
+
+    - name: Hit /alive through the in-cluster Service
+      try:
+        - script:
+            content: |
+              set -eu
+              # --attach + --rm makes kubectl run inherit the container exit
+              # status, so curl's -f failure mode bubbles up as a step failure.
+              kubectl -n "${NAMESPACE}" run httpcheck \
+                --image=curlimages/curl:8.10.1 \
+                --restart=Never --rm -i --quiet --attach \
+                --command -- \
+                curl -fsS --max-time 10 -o /dev/null -w 'http=%{http_code}\n' \
+                  http://vw-service:8080/alive
+      catch:
+        - podLogs:
+            selector: app=vaultwarden
