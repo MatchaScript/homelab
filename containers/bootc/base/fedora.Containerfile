@@ -1,4 +1,5 @@
-FROM quay.io/fedora/fedora-bootc:latest@sha256:cf43a66c464a71c08f479a834716d54a94830001aecaef7e9e23d7c5ef1c4dfd AS builder
+ARG BOOTC_BASE
+FROM ${BOOTC_BASE} AS builder
 ARG TARGETARCH='amd64'
 
 RUN /usr/libexec/bootc-base-imagectl build-rootfs --manifest=fedora-minimal /target-rootfs

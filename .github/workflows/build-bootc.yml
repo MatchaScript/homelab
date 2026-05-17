@@ -37,7 +37,8 @@ env:
   NAMESPACE: matchascript
   FEDORA_IMAGE: fedora-bootc
   ASAHI_IMAGE: asahi-bootc
-  BOOTC_BASE: "quay.io/fedora/fedora-bootc:latest"
+  # renovate: datasource=docker depName=quay.io/fedora/fedora-bootc
+  BOOTC_BASE: "quay.io/fedora/fedora-bootc:latest@sha256:fd37687b57230e10f6313293072d315236a1869959e639dd1511598a0371ba07"
   CONTEXT_DIR: ./containers
 
 jobs:
@@ -163,6 +164,7 @@ jobs:
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
+            --build-arg BOOTC_BASE="${{ env.BOOTC_BASE }}" \
             --build-arg VERSION_ID="${VERSION_ID}" \
             "${LABEL_ARGS[@]}" \
             --tag temp-base-${{ matrix.arch }} \
@@ -396,6 +398,7 @@ jobs:
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
+            --build-arg BOOTC_BASE="${{ env.BOOTC_BASE }}" \
             --build-arg VERSION_ID="${VERSION_ID}" \
             "${LABEL_ARGS[@]}" \
             --tag temp-asahi \

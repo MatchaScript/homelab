@@ -1,4 +1,4 @@
-ARG BASE_IMAGE="quay.io/fedora/fedora:latest@sha256:b00731118b233046ebcd41da864fc73dde1a1e1725af6f43c328190ff6f25351"
+ARG BASE_IMAGE
 
 # ── Stage 1: Download GHA runner binaries ────────────────────────────────────
 FROM ${BASE_IMAGE} AS downloader

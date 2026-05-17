@@ -1,5 +1,5 @@
 # Global build arguments
-ARG SYSBASE=ghcr.io/matchascript/fedora-bootc:latest@sha256:10e934375e2ebb658ed66c28a776c92ed6130a18c0823e1c51f350eb7c822eac
+ARG SYSBASE
 ARG KUBEADM_VERSION="v1.35"
 
 # Stage 1: Download kubeadm binary

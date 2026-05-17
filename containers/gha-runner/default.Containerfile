@@ -1,4 +1,4 @@
-ARG BASE_IMAGE="ghcr.io/matchascript/gha-runner-slim:latest@sha256:b7c74aa3224949718a51673cd2416f031bcd4281ef3624b5999883e33bce6b1b"
+ARG BASE_IMAGE
 
 # ── Stage 1: Install packages ────────────────────────────────────────────────
 FROM ${BASE_IMAGE} AS default-build

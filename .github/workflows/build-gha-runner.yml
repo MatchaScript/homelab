@@ -27,7 +27,8 @@ env:
   NAMESPACE: matchascript
   SLIM_IMAGE: gha-runner-slim
   DEFAULT_IMAGE: gha-runner
-  FEDORA_BASE: "ghcr.io/matchascript/fedora:latest"
+  # renovate: datasource=docker depName=ghcr.io/matchascript/fedora
+  FEDORA_BASE: "ghcr.io/matchascript/fedora:latest@sha256:b17d33ccbdbd0dce5755c2940eed4d6c3ba1796d96bfbbc64e23e5dad6f49820"
   CONTEXT_DIR: ./containers
 
 jobs:
