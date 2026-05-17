@@ -141,6 +141,20 @@ cluster:
     ldap: {}
 
   # -- BootstrapInitDB configuration. https://cloudnative-pg.io/documentation/current/bootstrap/
+  #
+  # Any field other than `postInitApplicationSQL` and `owner` is passed through
+  # verbatim to the Cluster CR's `spec.bootstrap.initdb`. That includes the
+  # CRD-native ConfigMap/Secret refs for post-init SQL — useful for seeding a
+  # database schema authored elsewhere (e.g. another chart's ConfigMap):
+  #
+  #   initdb:
+  #     database: app
+  #     owner: app
+  #     postInitApplicationSQLRefs:
+  #       configMapRefs:
+  #         - name: my-schema-cm
+  #           key: schema.sql
+  #     # postInitSQLRefs / postInitTemplateSQLRefs follow the same shape.
   initdb: {}
 
   serviceAccountTemplate: {}
