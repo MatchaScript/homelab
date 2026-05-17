@@ -49,6 +49,8 @@ jobs:
               - 'charts/powerdns/**'
             vault-eso:
               - 'charts/vault-eso/**'
+            vaultwarden:
+              - 'charts/vaultwarden/**'
 
       - name: Collect chart list
         id: collect

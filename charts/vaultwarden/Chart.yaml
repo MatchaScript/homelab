@@ -1,0 +1,22 @@
+apiVersion: v2
+name: vaultwarden
+description: |
+  Deploys Vaultwarden — an unofficial Bitwarden-compatible server written in
+  Rust. Renders a Deployment, Service, optional Ingress, and a
+  PersistentVolumeClaim for the SQLite data directory. Optional SSO/OIDC env
+  wiring reads client credentials from a Secret named via values.
+type: application
+version: 0.1.0
+appVersion: "1.32.7"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/MatchaScript/homelab
+sources:
+  - https://github.com/MatchaScript/homelab
+  - https://github.com/dani-garcia/vaultwarden
+keywords:
+  - vaultwarden
+  - bitwarden
+  - password-manager
+maintainers:
+  - name: MatchaScript
+    url: https://github.com/MatchaScript

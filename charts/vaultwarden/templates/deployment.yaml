@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-deployment
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: vaultwarden
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: vaultwarden
+  template:
+    metadata:
+      labels:
+        app: vaultwarden
+    spec:
+      {{- if .Values.hostUsers }}
+      hostUsers: {{ .Values.hostUsers }}
+      {{- end }}
+      containers:
+        - name: vaultwarden
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: SIGNUPS_ALLOWED
+              value: {{ .Values.env.SIGNUPS_ALLOWED | quote }}
+            {{- with .Values.env.DOMAIN }}
+            - name: DOMAIN
+              value: {{ . | quote }}
+            {{- end }}
+            - name: ROCKET_PORT
+              value: {{ .Values.env.ROCKET_PORT | quote }}
+            {{- if .Values.sso.enabled }}
+            - name: SSO_ENABLED
+              value: "true"
+            - name: SSO_AUTHORITY
+              value: {{ .Values.sso.authority | quote }}
+            - name: SSO_SCOPES
+              value: {{ .Values.sso.scopes | quote }}
+            - name: SSO_PKCE
+              value: {{ .Values.sso.pkce | quote }}
+            - name: SSO_CLIENT_CACHE_EXPIRATION
+              value: {{ .Values.sso.clientCacheExpiration | quote }}
+            - name: SSO_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-oidc-secret
+                  key: client-id
+            - name: SSO_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-oidc-secret
+                  key: client-secret
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: vaultwarden-data
+              mountPath: /data
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+        runAsGroup: {{ .Values.securityContext.runAsGroup }}
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      volumes:
+        - name: vaultwarden-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-pvc" .Release.Name) }}
+
