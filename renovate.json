@@ -58,6 +58,13 @@
         "github-actions"
       ],
       "groupName": "github actions"
+    },
+    {
+      "description": "Disable digest pinning for Containerfiles",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "pinDigests": false
     }
   ]
 }
