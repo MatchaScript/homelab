@@ -1,0 +1,24 @@
+realm:
+  name: ""
+  # When set, this cluster joins an existing realm hosted on another cluster
+  # instead of creating a fresh one. The endpoint must be reachable from this
+  # cluster and point at an RGW in the master zone of the master zone group.
+  pull:
+    endpoint: ""
+  defaultRealm: false
+
+zoneGroup:
+  name: ""
+
+zone:
+  name: ""
+  # Pool specs are passed through to CephObjectZone unchanged. Specify either
+  # `replicated.size` or `erasureCoded.{dataChunks,codingChunks}`, never both.
+  # Defaults are intentionally empty so a caller override fully replaces them
+  # rather than deep-merging against an unrelated default.
+  metadataPool: {}
+  dataPool: {}
+  preservePoolsOnDelete: true
+  # Externally-reachable endpoints for cross-cluster replication. Leave empty
+  # when peer clusters can reach this zone via the in-cluster RGW Service.
+  customEndpoints: []

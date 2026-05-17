@@ -1,0 +1,15 @@
+apiVersion: ceph.rook.io/v1
+kind: CephObjectRealm
+metadata:
+  name: {{ required "realm.name is required" .Values.realm.name }}
+  namespace: {{ .Release.Namespace }}
+{{- if or .Values.realm.pull.endpoint .Values.realm.defaultRealm }}
+spec:
+  {{- with .Values.realm.pull.endpoint }}
+  pull:
+    endpoint: {{ . }}
+  {{- end }}
+  {{- if .Values.realm.defaultRealm }}
+  defaultRealm: true
+  {{- end }}
+{{- end }}

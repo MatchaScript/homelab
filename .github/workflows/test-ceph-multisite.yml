@@ -1,0 +1,41 @@
+name: test(ceph-multisite)
+
+on:
+  pull_request:
+    paths:
+      - 'charts/ceph-multisite/**'
+      - '.github/workflows/test-ceph-multisite.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+# The chart only renders three Rook CRs. End-to-end reconciliation requires a
+# real Rook Ceph cluster with OSDs, which kind in CI cannot host cheaply, so
+# the test scope here is intentionally limited to `helm lint` + `helm
+# template` across multiple values variants. See the chart Makefile.
+jobs:
+  lint:
+    name: helm lint + template
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5
+        with:
+          version: v3.16.2
+
+      - name: helm lint + template variants
+        run: make -C charts/ceph-multisite lint

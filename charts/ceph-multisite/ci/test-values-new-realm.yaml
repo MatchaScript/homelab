@@ -1,0 +1,19 @@
+# Master cluster: creates a new realm. spec.pull is absent on the realm CR.
+realm:
+  name: realm-a
+  defaultRealm: true
+
+zoneGroup:
+  name: zg-east
+
+zone:
+  name: zone-east-1
+  metadataPool:
+    failureDomain: host
+    replicated:
+      size: 3
+  dataPool:
+    failureDomain: host
+    replicated:
+      size: 3
+  preservePoolsOnDelete: true
