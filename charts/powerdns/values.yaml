@@ -8,7 +8,7 @@ image:
   repository: docker.io/powerdns/pdns-auth-50
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest@sha256:fde7df53dfd1eeeda5c3605465628b27ca08b986d7d4d0f55b70d57213bbad08"
+  tag: "latest@sha256:f626764557339d0b9d03e178e48a94641c707da8da2655cfa413b4d8cab2238b"
 
 # Image used by the credentials init container. Needs sh + redirection only.
 initContainer:
