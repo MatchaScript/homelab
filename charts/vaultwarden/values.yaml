@@ -8,7 +8,7 @@ image:
   repository: docker.io/vaultwarden/server
   pullPolicy: IfNotPresent
   # Empty defers to .Chart.AppVersion.
-  tag: ""
+  tag: "@sha256:d626d04934cd1192ad8ced1adb975099fca78cec33ab467d2d3c923cde7f3b0c"
 
 # Security settings
 hostUsers: false
