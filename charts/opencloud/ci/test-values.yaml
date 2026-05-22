@@ -1,0 +1,88 @@
+# Values used by `helm lint` and `helm template` smoke checks.
+# Exercises every templated branch — HTTPRoute, external NATS with untrusted
+# CA, external Tika, SMTP, PDB, custom CSP, app registry override — without
+# requiring a live cluster.
+
+namespace: opencloud
+
+host: cloud.test
+
+admin:
+  existingSecret: opencloud-admin
+
+oidc:
+  issuer: https://idp.test/realms/main
+  accountUrl: https://idp.test/realms/main/account
+  clientId: web
+  scope: "openid profile email groups roles"
+
+s3:
+  endpoint: https://s3.test
+  region: eu-central-1
+  bucket: opencloud
+  existingSecret: opencloud-s3
+
+nats:
+  external:
+    enabled: true
+    endpoint: nats.opencloud-nats.svc.cluster.local:4222
+    cluster: opencloud-cluster
+    tls:
+      enabled: true
+      certTrusted: false
+      insecure: false
+      caSecretName: opencloud-nats-ca
+
+tika:
+  url: http://tika.opencloud-tika.svc.cluster.local:9998
+
+smtp:
+  enabled: true
+  host: smtp.test
+  port: "587"
+  sender: "OpenCloud <notifications@test>"
+  existingSecret: opencloud-smtp
+
+httpRoute:
+  enabled: true
+  parentRef:
+    name: edge
+    namespace: gateway
+    sectionName: https
+  hostnames:
+    - cloud.test
+    - cloud-alt.test
+  annotations:
+    cert-manager.io/cluster-issuer: ci-issuer
+
+persistence:
+  config:
+    enabled: true
+    size: 1Gi
+    storageClass: standard
+  data:
+    enabled: true
+    size: 5Gi
+    storageClass: standard
+
+config:
+  appRegistry:
+    mimetypes:
+      - mime_type: application/pdf
+        extension: pdf
+        name: PDF
+        description: PDF document
+        icon: ""
+        default_app: ""
+        allow_creation: false
+  csp: |
+    directives:
+      default-src:
+        - "'none'"
+  bannedPasswordList: |-
+    hunter2
+    correcthorsebatterystaple
+
+pdb:
+  enabled: true
+  minAvailable: 1
