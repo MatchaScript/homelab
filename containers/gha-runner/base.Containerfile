@@ -37,7 +37,8 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     git \
     unzip \
     uv \
-    libicu
+    libicu \
+    gettext-envsubst
 
 RUN rpm --setcaps shadow-utils 2>/dev/null
 RUN groupadd docker --gid 123 \
