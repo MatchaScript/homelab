@@ -12,8 +12,24 @@
 #                                             grafana_folder annotation baked in
 set -euo pipefail
 
+# Force C locale so `sort` produces the same ordering regardless of the
+# operating system / locale CI runs under.
+export LC_ALL=C
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# Strip and re-add a single trailing newline so generated files are
+# byte-identical across go-jsonnet builds that disagree on whether
+# `-S -m` output ends with `\n`.
+normalize_newline() {
+  local f
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    printf '%s\n' "$(cat "$f")" > "$f.tmp"
+    mv "$f.tmp" "$f"
+  done
+}
 
 TMP_DIR="tmp"
 
@@ -49,6 +65,7 @@ for entry in "${MIXINS[@]}"; do
   if [ -n "$rule_entry" ]; then
     mkdir -p "$out/prometheusrules"
     jsonnet -J vendor -S -m "$out/prometheusrules" "$rule_entry" >/dev/null
+    normalize_newline "$out/prometheusrules"/*.yaml
   fi
 
   # Regenerate per-mixin kustomization.yaml deterministically.

@@ -17,6 +17,7 @@ resources:
   - prometheusrules/kubernetes-mixin-kube-apiserver-burnrate-rules.yaml
   - prometheusrules/kubernetes-mixin-kube-apiserver-histogram-rules.yaml
   - prometheusrules/kubernetes-mixin-kube-apiserver-slos.yaml
+  - prometheusrules/kubernetes-mixin-kube-scheduler-rules.yaml
   - prometheusrules/kubernetes-mixin-kubelet-rules.yaml
   - prometheusrules/kubernetes-mixin-kubernetes-apps.yaml
   - prometheusrules/kubernetes-mixin-kubernetes-resources.yaml
@@ -26,7 +27,6 @@ resources:
   - prometheusrules/kubernetes-mixin-kubernetes-system-kubelet.yaml
   - prometheusrules/kubernetes-mixin-kubernetes-system-scheduler.yaml
   - prometheusrules/kubernetes-mixin-kubernetes-system.yaml
-  - prometheusrules/kubernetes-mixin-kube-scheduler-rules.yaml
   - prometheusrules/kubernetes-mixin-node-rules.yaml
 
 configMapGenerator:
