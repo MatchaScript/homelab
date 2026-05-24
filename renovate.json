@@ -40,6 +40,16 @@
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+\\S+:\\s*[\"']?[^\"'\\s:]+:(?<currentValue>[^@\"'\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
       ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/|\\.)Containerfile$",
+        "(^|/)Containerfile[^/]*$"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+ARG\\s+\\w+=[\"']?(?<currentValue>[^\"'\\s]+)[\"']?"
+      ]
     }
   ],
   "packageRules": [
@@ -67,6 +77,15 @@
         "github-actions"
       ],
       "groupName": "github actions"
+    },
+    {
+      "description": "Strip leading 'v' from actions/runner* GitHub release tags",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": [
+        "actions/runner",
+        "actions/runner-container-hooks"
+      ],
+      "extractVersion": "^v(?<version>.+)$"
     }
   ]
 }

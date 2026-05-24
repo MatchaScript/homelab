@@ -4,7 +4,9 @@ ARG BASE_IMAGE
 FROM ${BASE_IMAGE} AS downloader
 
 ARG TARGETARCH
+# renovate: datasource=github-releases depName=actions/runner
 ARG RUNNER_VERSION="2.332.0"
+# renovate: datasource=github-releases depName=actions/runner-container-hooks
 ARG RUNNER_CONTAINER_HOOKS_VERSION="0.8.1"
 
 RUN --mount=type=cache,target=/var/cache/dnf \
