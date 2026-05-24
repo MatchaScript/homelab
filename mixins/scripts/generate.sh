@@ -30,10 +30,14 @@ mkdir -p "$TMP_DIR"
 find base -mindepth 1 -delete 2>/dev/null || true
 
 # Validate raw alert/recording rules with promtool before wrapping into CRs.
+# --lint=none skips lint-level checks (e.g. upstream kubernetes-mixin has a
+# known duplicate-rule warning in code_verb:apiserver_request_total:increase1h
+# that newer promtool treats as a fatal lint error). Syntax validation still
+# runs.
 jsonnet -J vendor -S lib/raw_alerts.jsonnet > "$TMP_DIR/raw_alerts.yaml"
 jsonnet -J vendor -S lib/raw_rules.jsonnet  > "$TMP_DIR/raw_rules.yaml"
-promtool check rules "$TMP_DIR/raw_alerts.yaml"
-promtool check rules "$TMP_DIR/raw_rules.yaml"
+promtool check rules --lint=none "$TMP_DIR/raw_alerts.yaml"
+promtool check rules --lint=none "$TMP_DIR/raw_rules.yaml"
 
 for entry in "${MIXINS[@]}"; do
   IFS=':' read -r mixin folder dash_entry rule_entry <<<"$entry"
