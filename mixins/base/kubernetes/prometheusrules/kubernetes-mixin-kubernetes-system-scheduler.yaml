@@ -1,0 +1,31 @@
+apiVersion: "monitoring.coreos.com/v1"
+kind: "PrometheusRule"
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: "argocd"
+    app.kubernetes.io/part-of: "kubernetes-mixin"
+  name: "kubernetes-mixin-kubernetes-system-scheduler"
+spec:
+  groups:
+  - name: "kubernetes-system-scheduler"
+    rules:
+    - alert: "KubeSchedulerDown"
+      annotations:
+        description: "KubeScheduler has disappeared from Prometheus target discovery."
+        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerdown"
+        summary: "Target disappeared from Prometheus target discovery."
+      expr: |
+        absent(up{job="kube-scheduler"})
+      for: "15m"
+      labels:
+        severity: "critical"
+    - alert: "KubeSchedulerInstanceUnreachable"
+      annotations:
+        description: "A KubeScheduler instance has been unreachable for more than 15 minutes."
+        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerinstanceunreachable"
+        summary: "KubeScheduler instance is unreachable."
+      expr: |
+        up{job="kube-scheduler"} == 0
+      for: "15m"
+      labels:
+        severity: "warning"
