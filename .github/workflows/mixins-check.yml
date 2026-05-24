@@ -1,0 +1,60 @@
+name: check(mixins)
+
+on:
+  pull_request:
+    paths:
+      - 'mixins/**'
+      - '.github/workflows/mixins-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mixins/**'
+      - '.github/workflows/mixins-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # renovate: datasource=github-releases depName=jsonnet-bundler/jsonnet-bundler
+  JB_VERSION: v0.6.0
+  # renovate: datasource=github-releases depName=google/go-jsonnet
+  JSONNET_VERSION: v0.21.0
+  # renovate: datasource=github-releases depName=prometheus/prometheus
+  PROMETHEUS_VERSION: v3.2.1
+
+jobs:
+  check:
+    name: Verify base/ matches lib/
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install jsonnet tooling
+        run: |
+          go install github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb@${JB_VERSION}
+          go install github.com/google/go-jsonnet/cmd/jsonnet@${JSONNET_VERSION}
+          go install github.com/google/go-jsonnet/cmd/jsonnetfmt@${JSONNET_VERSION}
+
+      - name: Install promtool
+        run: |
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION#v}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 -C /usr/local/bin "prometheus-${PROMETHEUS_VERSION#v}.linux-amd64/promtool"
+
+      - name: make check
+        working-directory: mixins
+        run: make check
