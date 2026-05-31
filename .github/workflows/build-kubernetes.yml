@@ -9,6 +9,11 @@ on:
       kubernetes_version:
         description: "Kubernetes minor version channel (e.g. v1.35)"
         required: false
+        default: "v1.35"
+        type: string
+      kubeadm_version:
+        description: "kubeadm binary channel (e.g. v1.35); falls back to kubernetes_version when blank"
+        required: false
         default: "v1.36"
         type: string
       push_images:
@@ -49,6 +54,7 @@ jobs:
       current_date: ${{ steps.compute.outputs.current_date }}
       version_id: ${{ steps.compute.outputs.version_id }}
       kubernetes_version: ${{ steps.compute.outputs.kubernetes_version }}
+      kubeadm_version: ${{ steps.compute.outputs.kubeadm_version }}
       version_key: ${{ steps.compute.outputs.version_key }}
       branch_name: ${{ steps.compute.outputs.branch_name }}
       registry: ${{ steps.compute.outputs.registry }}
@@ -64,6 +70,7 @@ jobs:
         env:
           TZ: "Asia/Tokyo"
           INPUT_K8S: ${{ inputs.kubernetes_version }}
+          INPUT_KUBEADM: ${{ inputs.kubeadm_version }}
           INPUT_REGISTRY: ${{ inputs.target_registry }}
         run: |
           set -euo pipefail
@@ -75,6 +82,10 @@ jobs:
           K8S="${INPUT_K8S:-${KUBERNETES_VERSION_DEFAULT}}"
           echo "kubernetes_version=$K8S" >> "$GITHUB_OUTPUT"
           echo "Kubernetes channel: $K8S"
+
+          KUBEADM="${INPUT_KUBEADM:-$K8S}"
+          echo "kubeadm_version=$KUBEADM" >> "$GITHUB_OUTPUT"
+          echo "kubeadm channel: $KUBEADM"
 
           VERSION_ID=$(sudo podman run --rm "$SYSBASE_AMD64" cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
           if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
@@ -149,6 +160,7 @@ jobs:
       - name: Build base image (buildah)
         env:
           KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
+          KUBEADM_VERSION: ${{ needs.prepare.outputs.kubeadm_version }}
           OCI_LABELS: ${{ steps.labels.outputs.labels }}
           SYSBASE: ${{ matrix.variant == 'amd64' && env.SYSBASE_AMD64 || env.SYSBASE_ASAHI }}
           PLATFORM: ${{ matrix.platform }}
@@ -170,7 +182,7 @@ jobs:
             --build-arg SYSBASE="$SYSBASE" \
             --build-arg TARGETARCH="$TARGETARCH" \
             --build-arg KUBERNETES_VERSION="$KUBERNETES_VERSION" \
-            --build-arg KUBEADM_VERSION="$KUBERNETES_VERSION" \
+            --build-arg KUBEADM_VERSION="$KUBEADM_VERSION" \
             "${LABEL_ARGS[@]}" \
             --tag "temp-k8s-${VARIANT}" \
             -f "${CONTEXT_DIR}/bootc/kubernetes/base.Containerfile" \
