@@ -9,7 +9,7 @@ on:
       kubernetes_version:
         description: "Kubernetes minor version channel (e.g. v1.35)"
         required: false
-        default: "v1.35"
+        default: "v1.36"
         type: string
       push_images:
         description: "Push images to registry"
@@ -137,20 +137,6 @@ jobs:
       - name: Setup Podman
         uses: ./.github/actions/setup-podman
 
-      - name: Resolve SYSBASE
-        id: sysbase
-        env:
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          set -euo pipefail
-          case "$VARIANT" in
-            amd64) REF="$SYSBASE_AMD64" ;;
-            asahi) REF="$SYSBASE_ASAHI" ;;
-            *) echo "Unknown variant: $VARIANT" >&2; exit 1 ;;
-          esac
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "SYSBASE: $REF"
-
       - name: Generate OCI labels
         id: labels
         uses: ./.github/actions/oci-labels
@@ -158,13 +144,13 @@ jobs:
           title: ${{ matrix.title }}
           description: ${{ matrix.description }}
           version: "${{ needs.prepare.outputs.version_key }}.${{ needs.prepare.outputs.current_date }}"
-          base_name: ${{ steps.sysbase.outputs.ref }}
+          base_name: ${{ matrix.variant == 'amd64' && env.SYSBASE_AMD64 || env.SYSBASE_ASAHI }}
 
       - name: Build base image (buildah)
         env:
           KUBERNETES_VERSION: ${{ needs.prepare.outputs.kubernetes_version }}
           OCI_LABELS: ${{ steps.labels.outputs.labels }}
-          SYSBASE: ${{ steps.sysbase.outputs.ref }}
+          SYSBASE: ${{ matrix.variant == 'amd64' && env.SYSBASE_AMD64 || env.SYSBASE_ASAHI }}
           PLATFORM: ${{ matrix.platform }}
           TARGETARCH: ${{ matrix.targetarch }}
           VARIANT: ${{ matrix.variant }}
