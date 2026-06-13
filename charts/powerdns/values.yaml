@@ -146,3 +146,24 @@ dnsdist:
   #   setLocal("0.0.0.0:5353")
   #   newServer({address="<fullname>:5353", pool="auth"})
   #   newServer({address="<fullname>-recursor:5353", pool="recursor"})  # if recursor enabled
+
+# Zone bootstrap
+# Ensures authoritative zones exist via the PowerDNS HTTP API after install and
+# upgrade (runs as a Helm post-install/post-upgrade hook). API clients such as
+# external-dns only manage records within existing zones; this seeds the zones
+# themselves, and PowerDNS generates the SOA automatically. Requires
+# powerdns.appCredentialsSecret (the Secret holding 'api-key'). An empty zones
+# list disables the hook entirely.
+zoneBootstrap:
+  image:
+    repository: docker.io/curlimages/curl
+    tag: "8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69"
+    pullPolicy: IfNotPresent
+  # Seconds to wait for the PowerDNS API to become reachable before giving up.
+  apiTimeoutSeconds: 300
+  # Zones to create if absent. Trailing dots are added automatically.
+  zones: []
+  #  - name: example.org
+  #    kind: Native            # optional, defaults to Native
+  #    nameservers:            # optional
+  #      - ns1.example.org

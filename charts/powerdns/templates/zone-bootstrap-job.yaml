@@ -1,0 +1,84 @@
+{{- if .Values.zoneBootstrap.zones }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "powerdns.fullname" . }}-zone-bootstrap
+  labels:
+    {{- include "powerdns.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "powerdns.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: zone-bootstrap
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: zone-bootstrap
+          image: "{{ .Values.zoneBootstrap.image.repository }}:{{ .Values.zoneBootstrap.image.tag }}"
+          imagePullPolicy: {{ .Values.zoneBootstrap.image.pullPolicy }}
+          env:
+            - name: PDNS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "powerdns.appCredentialsSecret is required when zoneBootstrap.zones is set" .Values.powerdns.appCredentialsSecret }}
+                  key: api-key
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              api="http://{{ include "powerdns.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8081/api/v1/servers/localhost/zones"
+              deadline=$(( $(date +%s) + {{ .Values.zoneBootstrap.apiTimeoutSeconds | int }} ))
+              until curl -sS -o /dev/null -m 5 -H "X-API-Key: ${PDNS_API_KEY}" "${api}"; do
+                if [ "$(date +%s)" -ge "${deadline}" ]; then
+                  echo "timed out waiting for the PowerDNS API at ${api}"
+                  exit 1
+                fi
+                echo "waiting for the PowerDNS API to become reachable..."
+                sleep 5
+              done
+              {{- range $z := .Values.zoneBootstrap.zones }}
+              {{- $zone := trimSuffix "." $z.name }}
+              {{- $ns := list }}
+              {{- range $z.nameservers }}
+              {{- $ns = append $ns (printf "%s." (trimSuffix "." .)) }}
+              {{- end }}
+              {{- $payload := dict "name" (printf "%s." $zone) "kind" ($z.kind | default "Native") "nameservers" $ns | toJson }}
+              code=$(curl -sS -o /dev/null -w '%{http_code}' -H "X-API-Key: ${PDNS_API_KEY}" "${api}/{{ $zone }}.")
+              if [ "${code}" = "200" ]; then
+                echo "zone {{ $zone }}. already exists, skipping"
+              else
+                echo "creating zone {{ $zone }}."
+                curl -fsS -X POST \
+                  -H "X-API-Key: ${PDNS_API_KEY}" \
+                  -H "Content-Type: application/json" \
+                  -d '{{ $payload }}' \
+                  "${api}"
+                echo "created zone {{ $zone }}."
+              fi
+              {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+{{- end }}
