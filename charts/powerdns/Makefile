@@ -54,6 +54,8 @@ lint:
 	  --values $(TEST_DIR)/01-auth-only/powerdns-values.yaml >/dev/null
 	helm template lint-full $(CHART_DIR) \
 	  --values $(TEST_DIR)/02-full-stack/powerdns-values.yaml >/dev/null
+	helm template lint-bootstrap $(CHART_DIR) \
+	  --values $(TEST_DIR)/03-zone-bootstrap/powerdns-values.yaml >/dev/null
 
 template:
 	helm template smoke $(CHART_DIR) \

@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: verify-zone
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: verify-zone
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: verify
+          image: docker.io/curlimages/curl:8.11.1@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
+          env:
+            - name: PDNS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: pdns-app
+                  key: api-key
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              url="http://pdns-powerdns:8081/api/v1/servers/localhost/zones/bootstrap.example.test."
+              code=$(curl -sS -o /dev/null -w '%{http_code}' -H "X-API-Key: ${PDNS_API_KEY}" "$url")
+              echo "GET zone -> HTTP ${code}"
+              test "${code}" = "200"
