@@ -54,12 +54,16 @@
   ],
   "packageRules": [
     {
-      "description": "Automerge non-major updates",
+      "description": "Auto-merge fedora-bootc base image digest bumps (gated by the Verify Base Images check). Scoped to this dep only for now; other updates stay manual. NOTE: this trusts the official Fedora upstream (quay.io/fedora/fedora-bootc); the gate is a build+smoke check, not an upstream-provenance check (Fedora does not sigstore-sign these images), so this is an accepted-risk auto-merge.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "quay.io/fedora/fedora-bootc"
+      ],
       "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
+        "digest",
+        "pin"
       ],
       "automerge": true,
       "automergeType": "pr"
