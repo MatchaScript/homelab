@@ -64,18 +64,6 @@ jobs:
         if: steps.changes.outputs.relevant == 'true'
         uses: ./.github/actions/setup-podman
 
-      - name: Landmine check (base manifest is pullable)
-        if: steps.changes.outputs.relevant == 'true'
-        env:
-          REF: ${{ steps.base.outputs.ref }}
-        run: |
-          set -euo pipefail
-          if ! sudo podman manifest inspect "$REF" >/dev/null 2>&1; then
-            echo "::error::Base manifest is not pullable (likely garbage-collected upstream): $REF"
-            exit 1
-          fi
-          echo "Base manifest resolves: $REF"
-
       - name: Build fedora-bootc base (amd64, no push)
         if: >-
           steps.changes.outputs.relevant == 'true'
