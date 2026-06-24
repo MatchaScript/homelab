@@ -8,7 +8,7 @@
           "subdir": "monitoring/ceph-mixin"
         }
       },
-      "version": "560904cdf327da9b93ad3b6c7fff387d6ce6dbd2",
+      "version": "6b040893f275a9aab03879de607864755c86227f",
       "sum": "ufVgGNSYLzuaS9DmMYVbQ9ZkYypir7YzWCiYUrGDSwc="
     },
     {
@@ -68,8 +68,8 @@
           "subdir": ""
         }
       },
-      "version": "e512e99111dff946c912ac5844952cc0c02569f1",
-      "sum": "P4pnM3UOOsvjb0UGXOwQdBVrdoJJEJrH47bCFbz3HZ4="
+      "version": "349819ffca696c61140103ec4a27c0c508334f18",
+      "sum": "dFblo/XFEgjLPAjt4ycfsvOvWPb3pchSqLoVwnP6SXc="
     }
   ],
   "legacyImports": false
