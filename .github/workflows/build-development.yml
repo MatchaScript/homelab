@@ -188,6 +188,7 @@ jobs:
             -v "$(pwd)/output":/output \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type qcow2 \
+            --rootfs ext4 \
             --local \
             localhost/temp-dev:latest
           ls -lh output/qcow2/disk.qcow2
