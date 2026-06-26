@@ -186,12 +186,14 @@ jobs:
             --security-opt label=type:unconfined_t \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             -v "$(pwd)/output":/output \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            --type qcow2 \
-            --rootfs btrfs \
-            --local \
-            localhost/temp-dev:latest
-          ls -lh output/qcow2/disk.qcow2
+            ghcr.io/osbuild/image-builder-cli:latest \
+            build qcow2 \
+            --bootc-ref localhost/temp-dev:latest \
+            --bootc-default-fs btrfs \
+            --output-dir /output
+          qcow2="$(find output -name '*.qcow2' | head -1)"
+          mv "$qcow2" output/disk.qcow2
+          ls -lh output/disk.qcow2
 
       - name: Build container-disk image
         run: |
@@ -200,7 +202,7 @@ jobs:
             --platform linux/amd64 \
             --tag temp-dev-disk \
             -f "${CONTEXT_DIR}/bootc/development/disk.Containerfile" \
-            output/qcow2/
+            output/
 
       - name: Generate tags (container-disk)
         id: disk-tags

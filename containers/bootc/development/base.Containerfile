@@ -10,7 +10,7 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
     systemd-networkd systemd-resolved bubblewrap nano vim \
     git-core gh sudo podman buildah skopeo chezmoi helm \
     jq uv rustup ripgrep fd-find fzf btop openssh-clients openssh-server \
-    fastfetch kubernetes-client k9s kind kustomize tar tuned @development-tools \
+    fastfetch kubernetes-client k9s kind kustomize tar tuned btrfs-progs @development-tools \
     && dnf clean all
 
 
