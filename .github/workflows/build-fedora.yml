@@ -53,7 +53,7 @@ jobs:
       can_push: ${{ steps.set_push.outputs.can_push }}
       variants: ${{ steps.set_matrix.outputs.variants }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set current date
         id: set_date
@@ -131,7 +131,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Install buildah
         run: |
@@ -236,7 +236,7 @@ jobs:
     env:
       REGISTRY: ${{ needs.prepare.outputs.registry }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Install buildah
         run: |
