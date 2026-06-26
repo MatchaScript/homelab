@@ -25,8 +25,8 @@ permissions:
 env:
   REGISTRY: ghcr.io
   NAMESPACE: matchascript
-  IMAGE: development
-  DISK_IMAGE: development-disk
+  IMAGE: fedora-development
+  DISK_IMAGE: fedora-development-disk
   # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
   DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest@sha256:d855474c5e18943a3f874f5c9a7f1861deed1db510e8175d5ecb8d8b3c9a50b2"
   CONTEXT_DIR: ./containers
@@ -188,7 +188,7 @@ jobs:
             -v "$(pwd)/output":/output \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type qcow2 \
-            --rootfs ext4 \
+            --rootfs btrfs \
             --local \
             localhost/temp-dev:latest
           ls -lh output/qcow2/disk.qcow2
