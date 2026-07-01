@@ -1,0 +1,27 @@
+apiVersion: v2
+name: opencloud
+description: |
+  Deploys OpenCloud (oCIS fork) as a single all-in-one pod backed by an
+  external S3 bucket via the decomposeds3 storage driver, an external OIDC
+  provider, and an in-process or external NATS service registry. Renders a
+  Deployment, Service, ConfigMap with config/CSP/search/banned-password
+  payloads, optional PersistentVolumeClaims for config and data, and an
+  optional Gateway API HTTPRoute. All credentials are sourced from existing
+  Secrets named via values.
+type: application
+version: 0.1.0
+# renovate: datasource=docker depName=opencloudeu/opencloud-rolling
+appVersion: "7.2.0"
+kubeVersion: ">=1.29.0-0"
+home: https://github.com/MatchaScript/homelab
+sources:
+  - https://github.com/MatchaScript/homelab
+  - https://github.com/opencloud-eu/opencloud
+keywords:
+  - opencloud
+  - ocis
+  - file-sync
+  - collaboration
+maintainers:
+  - name: MatchaScript
+    url: https://github.com/MatchaScript

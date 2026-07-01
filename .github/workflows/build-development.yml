@@ -1,0 +1,301 @@
+name: Build Development bootc image
+
+on:
+  schedule:
+    # 3日おき UTC 02:00 = JST 11:00
+    - cron: "0 2 */3 * *"
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  IMAGE: fedora-development
+  VM_IMAGE: fedora-development-vm
+  DISK_IMAGE: fedora-development-disk
+  # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
+  DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest@sha256:759416a290600db05deedcf0379d5b697476dd423a704512702251eeaf5539ab"
+  CONTEXT_DIR: ./containers
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-24.04
+    outputs:
+      current_date: ${{ steps.compute.outputs.current_date }}
+      version_id: ${{ steps.compute.outputs.version_id }}
+      branch_name: ${{ steps.compute.outputs.branch_name }}
+      registry: ${{ steps.compute.outputs.registry }}
+      can_push: ${{ steps.compute.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Compute build metadata
+        id: compute
+        env:
+          TZ: "Asia/Tokyo"
+          INPUT_REGISTRY: ${{ inputs.target_registry }}
+        run: |
+          set -euo pipefail
+
+          DATE="$(date +'%Y%m%d')"
+          echo "current_date=$DATE" >> "$GITHUB_OUTPUT"
+
+          VERSION_ID=$(sudo podman run --rm "$DEV_BASE" cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID=$(sudo podman inspect "$DEV_BASE" --format='{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "rawhide")
+          fi
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "<no value>" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID="rawhide"
+          fi
+          echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+          echo "Fedora VERSION_ID: $VERSION_ID"
+
+          BRANCH="${GITHUB_REF_NAME//\//-}"
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          REG="${INPUT_REGISTRY:-${REGISTRY}}"
+          echo "registry=$REG" >> "$GITHUB_OUTPUT"
+
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "devel" ]; then
+            echo "can_push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build bootc image, convert to qcow2, wrap as container-disk
+  # ════════════════════════════════════════════════════
+  build:
+    name: Build development image (amd64)
+    runs-on: ubuntu-24.04
+    needs: prepare
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Generate OCI labels (bootc)
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.IMAGE }}
+          description: "Development environment bootc image"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.DEV_BASE }}
+
+      - name: Build bootc image
+        env:
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
+        run: |
+          set -euo pipefail
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
+          sudo podman build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg DEV_BASE="${DEV_BASE}" \
+            "${LABEL_ARGS[@]}" \
+            --tag temp-dev \
+            -f "${CONTEXT_DIR}/bootc/development/base.Containerfile" \
+            "${CONTEXT_DIR}"
+
+      - name: Rechunk bootc image
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-dev:latest localhost/rechunked-temp-dev:latest
+          sudo podman tag localhost/rechunked-temp-dev:latest localhost/temp-dev:latest
+          sudo podman rmi localhost/rechunked-temp-dev:latest
+
+      - name: Generate tags (bootc)
+        id: bootc-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: "amd64 -"
+
+      - name: Login to registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin "${{ needs.prepare.outputs.registry }}"
+
+      - name: Tag and push bootc image
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          TAGS: ${{ steps.bootc-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $(echo "$TAGS" | tr ',' ' '); do
+            sudo podman tag temp-dev "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+      - name: Sign bootc image (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.bootc-tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Build VM variant (cloud-init, qemu-guest-agent) ──
+
+      - name: Generate OCI labels (VM variant)
+        id: vm-labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.VM_IMAGE }}
+          description: "Development environment bootc image (VM variant)"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: localhost/temp-dev:latest
+
+      - name: Build VM variant
+        env:
+          OCI_LABELS: ${{ steps.vm-labels.outputs.labels }}
+        run: |
+          set -euo pipefail
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
+          sudo podman build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg VM_BASE=localhost/temp-dev:latest \
+            "${LABEL_ARGS[@]}" \
+            --tag temp-dev-vm \
+            -f "${CONTEXT_DIR}/bootc/development/vm.Containerfile" \
+            "${CONTEXT_DIR}"
+
+      - name: Generate tags (VM variant)
+        id: vm-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.VM_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: "amd64 -"
+
+      - name: Tag and push VM variant
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          TAGS: ${{ steps.vm-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $(echo "$TAGS" | tr ',' ' '); do
+            sudo podman tag temp-dev-vm "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+      - name: Sign VM variant (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.vm-tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Convert VM variant to qcow2, wrap as container-disk ──
+
+      - name: Convert VM variant to qcow2
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          sudo podman run \
+            --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            -v "$(pwd)/output":/output \
+            ghcr.io/osbuild/image-builder-cli:latest \
+            build qcow2 \
+            --bootc-ref localhost/temp-dev-vm:latest \
+            --bootc-default-fs btrfs \
+            --output-dir /output
+          qcow2="$(find output -name '*.qcow2' | head -1)"
+          mv "$qcow2" output/disk.qcow2
+          ls -lh output/disk.qcow2
+
+      - name: Build container-disk image
+        run: |
+          set -euo pipefail
+          sudo podman build \
+            --platform linux/amd64 \
+            --tag temp-dev-disk \
+            -f "${CONTEXT_DIR}/bootc/development/disk.Containerfile" \
+            output/
+
+      - name: Generate tags (container-disk)
+        id: disk-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DISK_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: "amd64 -"
+
+      - name: Tag and push container-disk image
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          TAGS: ${{ steps.disk-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $(echo "$TAGS" | tr ',' ' '); do
+            sudo podman tag temp-dev-disk "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+      - name: Sign container-disk image (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.disk-tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

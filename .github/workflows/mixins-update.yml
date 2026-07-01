@@ -1,0 +1,115 @@
+name: update(mixins)
+
+on:
+  schedule:
+    # 毎週月曜 03:00 UTC (= 12:00 JST)
+    - cron: "0 3 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # renovate: datasource=github-releases depName=jsonnet-bundler/jsonnet-bundler
+  JB_VERSION: v0.6.0
+  # renovate: datasource=github-releases depName=google/go-jsonnet
+  JSONNET_VERSION: v0.21.0
+  # renovate: datasource=github-releases depName=prometheus/prometheus
+  PROMETHEUS_VERSION: v3.2.1
+
+jobs:
+  update:
+    name: Bump upstream mixins and regenerate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # peter-evans/create-pull-request manages its own auth header;
+          # leaving checkout's credentials in place causes a duplicate
+          # Authorization header on push and a 400 from GitHub.
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install jsonnet tooling
+        run: |
+          go install github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb@${JB_VERSION}
+          go install github.com/google/go-jsonnet/cmd/jsonnet@${JSONNET_VERSION}
+          go install github.com/google/go-jsonnet/cmd/jsonnetfmt@${JSONNET_VERSION}
+
+      - name: Install promtool
+        run: |
+          curl -fsSL "https://github.com/prometheus/prometheus/releases/download/${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION#v}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 -C /usr/local/bin "prometheus-${PROMETHEUS_VERSION#v}.linux-amd64/promtool"
+
+      - name: jb update
+        working-directory: mixins
+        run: jb update
+
+      - name: make generate
+        working-directory: mixins
+        run: make generate
+
+      - name: Summarize upstream lock diff
+        id: lock_diff
+        working-directory: mixins
+        run: |
+          if git diff --quiet -- jsonnetfile.lock.json; then
+            echo "summary=" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo 'summary<<EOF'
+              git diff --no-color -- jsonnetfile.lock.json
+              echo 'EOF'
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: chore/mixins-update
+          delete-branch: true
+          commit-message: |
+            chore(mixins): regenerate from upstream
+
+            Run by .github/workflows/mixins-update.yml — bumps
+            jsonnetfile.lock.json and re-renders base/<mixin>/ from the
+            pinned upstream mixins.
+          title: 'chore(mixins): regenerate from upstream'
+          body: |
+            Automated update from `.github/workflows/mixins-update.yml`.
+
+            - Bumps `mixins/jsonnetfile.lock.json` to the latest upstream
+              mixin revisions allowed by `jsonnetfile.json`.
+            - Re-renders `mixins/base/<mixin>/` accordingly.
+
+            <details><summary>jsonnetfile.lock.json diff</summary>
+
+            ```diff
+            ${{ steps.lock_diff.outputs.summary }}
+            ```
+
+            </details>
+
+            Merge once the dashboard / rule diffs look sane.
+          labels: |
+            mixins
+            automation
+          add-paths: |
+            mixins/jsonnetfile.lock.json
+            mixins/base/**

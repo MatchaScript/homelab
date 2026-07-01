@@ -1,0 +1,183 @@
+# Default values for opencloud.
+
+namespace: ""
+
+# Single all-in-one replica. HA (replicas > 1) requires an external NATS and
+# is not supported by this chart version.
+replicaCount: 1
+
+image:
+  repository: docker.io/opencloudeu/opencloud-rolling
+  pullPolicy: IfNotPresent
+  # Empty defers to .Chart.AppVersion.
+  tag: ""
+  # Optional digest pin (e.g. "sha256:abc123…"). Renders as
+  # <repo>:<tag>@<digest> when set; skipped when empty. Kept separate
+  # from `tag` so Renovate's helm-values manager doesn't splice the
+  # digest into an empty tag and produce an invalid image reference.
+  digest: ""
+  pullSecrets: []
+
+# Public domain users hit. Used in OC_URL and as the default HTTPRoute hostname.
+host: ""
+
+# Logging
+logLevel: info
+logColor: false
+logPretty: false
+
+# Self-signed cert tolerance for backend connections. Set false when every
+# upstream (OIDC, S3) presents a trusted certificate.
+insecure: false
+
+# Demo users. Useful for chainsaw, useless in production.
+createDemoUsers: false
+
+# Comma-joined into OC_ADD_RUN_SERVICES.
+additionalServices: []
+# Comma-joined into OC_EXCLUDE_RUN_SERVICES. `idp` is excluded by default
+# because this chart assumes an external OIDC provider.
+excludeServices:
+  - idp
+
+# Extra env vars and envFrom sources, appended verbatim to the container spec.
+env: []
+envFrom: []
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 4Gi
+
+# Pod-level
+securityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+# Container-level
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+# Admin credentials
+admin:
+  # Secret must expose key `adminPassword`.
+  existingSecret: ""
+
+# External OIDC provider (e.g. Keycloak). The chart deliberately does not
+# bundle an IdP; OC's internal `idp` service is excluded via excludeServices.
+oidc:
+  # Required. e.g. https://idp.example.com/realms/main
+  issuer: ""
+  # Required. e.g. https://idp.example.com/realms/main/account
+  accountUrl: ""
+  clientId: web
+  scope: "openid profile email groups roles"
+  userClaim: preferred_username
+
+# External S3 (decomposeds3 driver). Internal MinIO is not bundled.
+s3:
+  # Required. e.g. https://s3.example.com
+  endpoint: ""
+  region: default
+  bucket: opencloud
+  createBucket: true
+  # Secret must expose keys `accessKey` and `secretKey`.
+  existingSecret: ""
+
+# Service registry / cache / event bus.
+#   in-process: bundled NATS inside the opencloud pod (single replica only)
+#   external:   point at a clustered NATS (required for HA)
+nats:
+  external:
+    enabled: false
+    endpoint: ""
+    cluster: opencloud-cluster
+    tls:
+      enabled: false
+      # When the messaging system uses a CA the cluster doesn't trust, set
+      # certTrusted=false and supply the CA via caSecretName (key `ca.crt`).
+      certTrusted: true
+      insecure: false
+      caSecretName: ""
+
+# Optional external Tika for full-text indexing. When url is set the proxy
+# wires SEARCH_EXTRACTOR_TIKA_TIKA_URL through; otherwise extraction is off.
+tika:
+  url: ""
+
+# Optional SMTP for notifications.
+smtp:
+  enabled: false
+  host: ""
+  port: "587"
+  sender: ""
+  insecure: "false"
+  authentication: plain
+  encryption: starttls
+  # Secret must expose keys `smtpUser` and `smtpPassword`.
+  existingSecret: ""
+
+persistence:
+  # OpenCloud config dir (/etc/opencloud). Small. Survives pod restarts so
+  # generated machine auth keys and signing material persist.
+  config:
+    enabled: true
+    size: 1Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    existingClaim: ""
+  # OpenCloud data dir (/var/lib/opencloud). Holds local state outside the
+  # decomposeds3 bucket — search index, web assets, NATS JetStream files
+  # when running in-process. Disable only if you understand what you lose.
+  data:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    existingClaim: ""
+
+# Renderer overrides. Leave empty to use the chart's vendored copies.
+config:
+  # appRegistry: drop-in YAML for /etc/opencloud/app-registry.yaml. Empty
+  # falls back to the vendored app-registry.yaml in files/.
+  appRegistry: {}
+  # csp: raw YAML body for /etc/opencloud/csp.yaml. Empty falls back to the
+  # gotmpl-rendered default in files/csp.yaml.gotmpl.
+  csp: ""
+  # bannedPasswordList: multi-line literal of banned passwords (NOT a YAML
+  # list). One password per line. Empty falls back to files/banned-password-list.txt.
+  bannedPasswordList: ""
+
+httpRoute:
+  enabled: false
+  # Gateway reference. namespace empty means same namespace as the route.
+  parentRef:
+    name: ""
+    namespace: ""
+    sectionName: ""
+  # Hostnames the route matches. Empty falls back to [host].
+  hostnames: []
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 9200
+
+# Pod-level scheduling knobs
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+# PodDisruptionBudget. Only useful once replicas > 1.
+pdb:
+  enabled: false
+  minAvailable: 1

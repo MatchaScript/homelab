@@ -1,0 +1,21 @@
+mode: standalone
+
+cluster:
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+  initdb:
+    database: powerdns
+    owner: powerdns
+    postInitApplicationSQLRefs:
+      configMapRefs:
+        - name: pdns-powerdns-schema
+          key: schema.sql
+
+backups:
+  enabled: false

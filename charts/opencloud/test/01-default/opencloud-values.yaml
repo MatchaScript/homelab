@@ -1,0 +1,45 @@
+# Minimal values for the smoke-deploy test. Pairs with the in-cluster MinIO
+# and the dex OIDC stub that chainsaw-test.yaml provisions.
+#
+# Namespace is set per-test by chainsaw via --namespace; leave it unset so the
+# chart inherits. oidc.issuer / oidc.accountUrl depend on that namespace, so
+# they are passed in via `helm --set` from chainsaw-test.yaml rather than
+# hardcoded here.
+namespace: ""
+
+host: cloud.test
+
+admin:
+  existingSecret: opencloud-admin
+
+# Placeholders satisfying the fail-fast checks; chainsaw-test.yaml overrides
+# both via --set with the real in-cluster dex URL.
+oidc:
+  issuer: http://dex.example.svc.cluster.local:5556
+  accountUrl: http://dex.example.svc.cluster.local:5556/account
+
+s3:
+  endpoint: http://minio:9000
+  region: default
+  bucket: opencloud
+  existingSecret: opencloud-s3
+
+# OC_INSECURE so the proxy accepts the http:// dex issuer used by this test.
+insecure: true
+
+persistence:
+  config:
+    enabled: true
+    size: 256Mi
+    storageClass: standard
+  data:
+    enabled: true
+    size: 1Gi
+    storageClass: standard
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 256Mi
+  limits:
+    memory: 2Gi

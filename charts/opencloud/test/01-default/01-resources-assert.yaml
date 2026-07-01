@@ -1,0 +1,39 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oc-opencloud
+spec:
+  replicas: 1
+status:
+  (availableReplicas > `0`): true
+  (conditions[?type == 'Available'] | [0].status): "True"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oc-opencloud
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 9200
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oc-opencloud-config
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oc-opencloud-config
+status:
+  phase: Bound
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oc-opencloud-data
+status:
+  phase: Bound
