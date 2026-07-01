@@ -8,7 +8,7 @@ image:
   repository: docker.io/powerdns/pdns-auth-50
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "latest@sha256:f626764557339d0b9d03e178e48a94641c707da8da2655cfa413b4d8cab2238b"
+  tag: "latest@sha256:c6d296669d720dd3f596bf2b42dc25d2e272f40a2b2493a1c476b3007a1a4a75"
 
 # Image used by the credentials init container. Needs sh + redirection only.
 initContainer:
@@ -157,7 +157,7 @@ dnsdist:
 zoneBootstrap:
   image:
     repository: docker.io/curlimages/curl
-    tag: "8.20.0@sha256:b3f1fb2a51d923260350d21b8654bbc607164a987e2f7c84a0ac199a67df812a"
+    tag: "8.21.0@sha256:7c12af72ceb38b7432ab85e1a265cff6ae58e06f95539d539b654f2cfa64bb13"
     pullPolicy: IfNotPresent
   # Seconds to wait for the PowerDNS API to become reachable before giving up.
   apiTimeoutSeconds: 300
