@@ -13,7 +13,7 @@ COPY overlay.d/01-container-mirror/ /
 # ── Platform toolchain (refined from homelab-classic/envbox-base) ──
 RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
     zsh zsh-syntax-highlighting zsh-autosuggestions \
-    systemd-networkd systemd-resolved bubblewrap nano vim \
+    systemd-networkd systemd-resolved bubblewrap tar nano vim \
     git-core gh sudo podman buildah skopeo chezmoi helm \
     jq uv rustup ripgrep fd-find fzf btop openssh-clients openssh-server \
     fastfetch kubernetes-client k9s kind kustomize tar tuned btrfs-progs @development-tools \
