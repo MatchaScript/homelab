@@ -9,6 +9,11 @@ image:
   pullPolicy: IfNotPresent
   # Empty defers to .Chart.AppVersion.
   tag: ""
+  # Optional digest pin (e.g. "sha256:abc123…"). Renders as
+  # <repo>:<tag>@<digest> when set; skipped when empty. Kept separate
+  # from `tag` so Renovate's helm-values manager doesn't splice the
+  # digest into an empty tag and produce an invalid image reference.
+  digest: ""
 
 # Security settings
 hostUsers: false
