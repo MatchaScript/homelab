@@ -1,6 +1,6 @@
 ARG DEV_BASE=ghcr.io/matchascript/fedora-bootc:latest
 
-FROM ${DEV_BASE} AS krew-fetch
+FROM ghcr.io/matchascript/fedora:latest AS krew-fetch
 ARG TARGETARCH
 RUN curl -fsSL "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-linux_${TARGETARCH}.tar.gz" \
     | tar xz -C /tmp && mv /tmp/krew-linux_${TARGETARCH} /tmp/kubectl-krew
