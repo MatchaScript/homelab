@@ -4,6 +4,15 @@
     {
       "source": {
         "git": {
+          "remote": "https://github.com/ceph/ceph.git",
+          "subdir": "monitoring/ceph-mixin"
+        }
+      },
+      "version": "main"
+    },
+    {
+      "source": {
+        "git": {
           "remote": "https://github.com/kubernetes-monitoring/kubernetes-mixin.git",
           "subdir": ""
         }
@@ -13,11 +22,11 @@
     {
       "source": {
         "git": {
-          "remote": "https://github.com/ceph/ceph.git",
-          "subdir": "monitoring/ceph-mixin"
+          "remote": "https://github.com/prometheus/node_exporter.git",
+          "subdir": "docs/node-mixin"
         }
       },
-      "version": "main"
+      "version": "master"
     }
   ],
   "legacyImports": true

@@ -37,6 +37,7 @@ TMP_DIR="tmp"
 MIXINS=(
   "kubernetes:Kubernetes:lib/dashboards_kubernetes.jsonnet:lib/prometheusrules.jsonnet"
   "ceph:Ceph:lib/dashboards_ceph.jsonnet:"
+  "node-exporter:Node Exporter:lib/dashboards_node_exporter.jsonnet:"
 )
 
 mkdir -p "$TMP_DIR"

@@ -2,8 +2,9 @@
 
 Pre-built, kustomize-ready Grafana dashboards and Prometheus rules
 sourced from the upstream
-[kubernetes-mixin](https://github.com/kubernetes-monitoring/kubernetes-mixin)
-and [ceph-mixin](https://github.com/ceph/ceph/tree/main/monitoring/ceph-mixin)
+[kubernetes-mixin](https://github.com/kubernetes-monitoring/kubernetes-mixin),
+[ceph-mixin](https://github.com/ceph/ceph/tree/main/monitoring/ceph-mixin)
+and [node-mixin](https://github.com/prometheus/node_exporter/tree/master/docs/node-mixin)
 projects.
 
 Generated artefacts (`base/<mixin>/`) are committed so consumers can
@@ -23,7 +24,9 @@ required.
 | `base/<mixin>/` | generated, committed — each is a standalone kustomize base |
 
 Currently bundled mixins: **kubernetes**, **ceph** (dashboards only —
-Rook ships an equivalent PrometheusRule, see _Assumptions_ below).
+Rook ships an equivalent PrometheusRule), **node-exporter** (dashboards
+only — kube-prometheus-stack `defaultRules` ship the rules). See
+_Assumptions_ below.
 
 ## Consuming
 
@@ -87,6 +90,21 @@ in `lib/<mixin>.libsonnet`) for your environment, then `make generate`.
   alert set (vendored from ceph-mixin); duplicating leads to double
   evaluation. This base provides dashboards only.
 - NVMeoF and SMB gateway dashboards are filtered out.
+
+### node-exporter
+
+- Cluster label is `cluster`; `showMultiCluster` is enabled (adds the
+  per-cluster template variable and the multi-cluster USE dashboard).
+- Scrape job is `job="node-exporter"` (the upstream default is `node`).
+  Matches the `prometheus-node-exporter` ServiceMonitor `jobLabel`.
+- **Alerts and recording rules are intentionally not generated.**
+  kube-prometheus-stack `defaultRules` (`nodeExporterAlerting`,
+  `nodeExporterRecording`, `network`) ship the same set; duplicating
+  leads to double evaluation. This base provides dashboards only — the
+  USE Method dashboards consume the `instance:node_*` recording rules
+  those defaultRules supply. (Clusters that don't run those defaultRules
+  must provide the node-exporter rules another way.)
+- Darwin and AIX node dashboards are filtered out (Linux-only fleet).
 
 ## Regenerating
 
