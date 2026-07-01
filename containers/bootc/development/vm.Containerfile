@@ -2,7 +2,7 @@ ARG VM_BASE=ghcr.io/matchascript/fedora-development:latest
 FROM ${VM_BASE}
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-    cloud-init qemu-guest-agent \
+    cloud-init cloud-utils-growpart qemu-guest-agent \
     && dnf clean all
 
 RUN systemctl enable qemu-guest-agent
