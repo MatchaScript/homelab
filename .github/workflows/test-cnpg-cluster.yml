@@ -24,6 +24,9 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       PROMETHEUS_IMAGE: prom/prometheus:v3.0.1
+      # renovate: datasource=github-releases depName=mikefarah/yq
+      YQ_VERSION: v4.53.3
+      YQ_SHA256: fa52a4e758c63d38299163fbdd1edfb4c4963247918bf9c1c5d31d84789eded4
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -38,8 +41,9 @@ jobs:
       - name: Install yq + promtool
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends yq
+          curl -fsSL -o /tmp/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64"
+          echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c -
+          sudo install -m 0755 /tmp/yq /usr/local/bin/yq
           yq --version
 
           cid="$(docker create "$PROMETHEUS_IMAGE")"

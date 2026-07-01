@@ -11,7 +11,7 @@ description: |
 type: application
 version: 0.1.0
 # renovate: datasource=docker depName=opencloudeu/opencloud-rolling
-appVersion: "7.1.0"
+appVersion: "7.2.0"
 kubeVersion: ">=1.29.0-0"
 home: https://github.com/MatchaScript/homelab
 sources:
