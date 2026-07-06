@@ -28,6 +28,7 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
     git-core gh sudo podman buildah skopeo chezmoi openbao opentofu helm \
     jq uv rustup ripgrep fd-find fzf btop openssh-clients openssh-server \
     fastfetch kubernetes-client k9s kind kustomize tar tuned btrfs-progs @development-tools \
+    qemu-system-x86-core qemu-img \
     && dnf clean all
 
 
