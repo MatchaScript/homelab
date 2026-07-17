@@ -24,6 +24,8 @@ ENV KUBEADM_VERSION=${KUBEADM_VERSION}
 COPY overlay.d/01-timesyncd/ /
 COPY overlay.d/01-container-mirror/ /
 COPY overlay.d/10-kubernetes/ /
+COPY overlay.d/10-zswap/ /
+COPY overlay.d/10-vm-tuning/ /
 
 RUN echo "$KUBERNETES_VERSION" > /etc/dnf/vars/kubever
 RUN echo "$CRIO_VERSION" > /etc/dnf/vars/criover
@@ -38,6 +40,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     libseccomp \
     dbus-daemon \
     tuned \
+    zswap-cli \
     sudo \
     vim \
     nano \
