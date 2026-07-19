@@ -53,7 +53,7 @@ test-fresh: test-down test
 prereqs:
 	$(TEST_DIR)/support/prereqs-install.sh
 
-lint:
+lint: lint-prom
 	helm lint $(CHART_DIR)
 	helm template lint-standalone $(CHART_DIR) \
 	  --values $(TEST_DIR)/01-standalone-backup-restore/01-cluster.yaml >/dev/null

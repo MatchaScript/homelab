@@ -1,0 +1,296 @@
+name: CI
+
+# Single always-on PR pipeline. Detection jobs run unconditionally; verification
+# jobs run only for the entries/charts that actually changed (matrix built from
+# .github/image-manifest.yml and .github/chart-filters.yml). The fan-in `CI Gate`
+# job is the required check, so "nothing changed" still produces a real pass
+# instead of a required check that silently never ran.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Detection
+  # ════════════════════════════════════════════════════
+  detect-images:
+    name: Detect image changes
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      has_matches: ${{ steps.detect.outputs.has_matches }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Match image-manifest.yml against changed paths
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          MANIFEST_JSON="$(yq eval -o=json '.' .github/image-manifest.yml)"
+
+          if [ -z "${BASE_SHA:-}" ]; then
+            # No base to diff against (e.g. workflow_dispatch): treat every
+            # entry as relevant, mirroring the previous verify-base-images.yml.
+            MATRIX="$(jq -c '[.[] | {
+              key,
+              pin_source,
+              pin_env_key: (.pin_env_key // null),
+              pin_from_stage: (.pin_from_stage // null),
+              containerfile,
+              build_arg: (.build_arg // null),
+              build_target: (.build_target // null),
+              runs_on: (.runs_on // "ubuntu-24.04")
+            }]' <<< "$MANIFEST_JSON")"
+          else
+            CHANGED="$(git diff --name-only "$BASE_SHA" HEAD)"
+            MATRIX="$(jq -c --arg changed "$CHANGED" '
+              ($changed | split("\n") | map(select(length > 0))) as $files
+              | [.[] | select(
+                  .watch_paths as $wp
+                  | any($files[]; . as $f | any($wp[]; . as $w | $f | startswith($w)))
+                ) | {
+                  key,
+                  pin_source,
+                  pin_env_key: (.pin_env_key // null),
+                  pin_from_stage: (.pin_from_stage // null),
+                  containerfile,
+                  build_arg: (.build_arg // null),
+                  build_target: (.build_target // null),
+                  runs_on: (.runs_on // "ubuntu-24.04")
+                }]
+            ' <<< "$MANIFEST_JSON")"
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          if [ "$MATRIX" = "[]" ]; then
+            echo "has_matches=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_matches=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Matched image entries: $MATRIX"
+
+  detect-charts:
+    name: Detect chart changes
+    runs-on: ubuntu-24.04
+    outputs:
+      charts: ${{ steps.filter.outputs.changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 1
+
+      - name: Filter by chart path
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        with:
+          filters: .github/chart-filters.yml
+
+  # ════════════════════════════════════════════════════
+  #  Verification
+  # ════════════════════════════════════════════════════
+  verify-image:
+    name: verify(${{ matrix.key }})
+    needs: detect-images
+    if: needs.detect-images.outputs.has_matches == 'true'
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.detect-images.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Extract pin
+        id: pin
+        run: |
+          set -euo pipefail
+          if [ -n "${{ matrix.pin_env_key }}" ]; then
+            REF="$(yq eval ".env.${{ matrix.pin_env_key }}" "${{ matrix.pin_source }}")"
+          else
+            REF="$(awk -v stage="${{ matrix.pin_from_stage }}" \
+              '$1=="FROM" && toupper($3)=="AS" && $4==stage {print $2; exit}' \
+              "${{ matrix.pin_source }}")"
+          fi
+          if [ -z "$REF" ] || [ "$REF" = "null" ]; then
+            echo "::error::Could not extract pin for ${{ matrix.key }} from ${{ matrix.pin_source }}"
+            exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Pin for ${{ matrix.key }}: $REF"
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Build (${{ matrix.key }})
+        if: >-
+          github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          RUNS_ON: ${{ matrix.runs_on }}
+        run: |
+          set -euo pipefail
+          ARCH=amd64
+          [[ "$RUNS_ON" == *-arm ]] && ARCH=arm64
+
+          ARGS=(--security-opt=label=disable --cap-add=all --device /dev/fuse)
+          if [ -n "${{ matrix.build_arg }}" ]; then
+            ARGS+=(--build-arg "${{ matrix.build_arg }}=${{ steps.pin.outputs.ref }}")
+          fi
+          if [ -n "${{ matrix.build_target }}" ]; then
+            ARGS+=(--target "${{ matrix.build_target }}")
+          fi
+
+          sudo podman build \
+            --platform "linux/${ARCH}" \
+            "${ARGS[@]}" \
+            --build-arg VERSION_ID="ci" \
+            --tag verify-image \
+            -f "${{ matrix.containerfile }}" \
+            ./containers
+
+      # --target builds (e.g. the kubeadm-downloader stage) are verified by
+      # build success alone; there is no runnable final image to smoke test.
+      - name: Smoke test (${{ matrix.key }})
+        if: >-
+          matrix.build_target == ''
+          && (github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          set -euo pipefail
+          echo "--- /etc/os-release ---"
+          VID=$(sudo podman run --rm verify-image cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"')
+          echo "VERSION_ID=$VID"
+          [ -n "$VID" ] || { echo "::error::VERSION_ID is empty"; exit 1; }
+
+          case "${{ matrix.containerfile }}" in
+            containers/bootc/*)
+              echo "--- bootc --version ---"
+              sudo podman run --rm verify-image bootc --version
+              ;;
+          esac
+
+  test-chart:
+    name: test(${{ matrix.chart }})
+    needs: detect-charts
+    if: needs.detect-charts.outputs.charts != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.detect-charts.outputs.charts) }}
+    env:
+      PROMETHEUS_IMAGE: prom/prometheus:v3.0.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          version: v3.16.2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+
+      # Lint toolchain provided uniformly; each chart's Makefile decides what
+      # its own `lint` target actually uses (helm / yq / promtool).
+      - name: Install promtool
+        run: |
+          set -euo pipefail
+          cid="$(docker create "$PROMETHEUS_IMAGE")"
+          docker cp "$cid:/bin/promtool" /tmp/promtool
+          docker rm "$cid"
+          sudo install -m 0755 /tmp/promtool /usr/local/bin/promtool
+          promtool --version | head -1
+
+      - name: Lint chart
+        run: make -C "charts/${{ matrix.chart }}" lint
+
+      - name: Install kind + create cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+        with:
+          cluster_name: ${{ matrix.chart }}-test
+          node_image: kindest/node:v1.34.3
+          wait: 120s
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Chainsaw
+        uses: kyverno/action-install-chainsaw@1223ef75bedeb59c4e7b5455463d4316e76dff01 # v0.2.15
+        with:
+          verify: true
+
+      # Convention (not a branch): a chart opts into prereqs by shipping this
+      # script under its own test/support/. No prereqs-install.sh = nothing to run.
+      - name: Install chart prerequisites
+        run: |
+          set -euo pipefail
+          script="charts/${{ matrix.chart }}/test/support/prereqs-install.sh"
+          if [ -f "$script" ]; then
+            bash "$script"
+          fi
+
+      - name: Run chainsaw test
+        env:
+          CHART_DIR: ${{ github.workspace }}/charts/${{ matrix.chart }}
+        run: |
+          chainsaw test \
+            --config "charts/${{ matrix.chart }}/test/chainsaw.yaml" \
+            "charts/${{ matrix.chart }}/test"
+
+  # ════════════════════════════════════════════════════
+  #  Gate
+  # ════════════════════════════════════════════════════
+  ci-gate:
+    name: CI Gate
+    needs: [detect-images, detect-charts, verify-image, test-chart]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Evaluate results
+        run: |
+          set -euo pipefail
+          fail=0
+
+          for result in "${{ needs.detect-images.result }}" "${{ needs.detect-charts.result }}"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::a detection job did not succeed (result: $result)"
+              fail=1
+            fi
+          done
+
+          for result in "${{ needs.verify-image.result }}" "${{ needs.test-chart.result }}"; do
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "::error::a verification job did not pass (result: $result)"
+                fail=1
+                ;;
+            esac
+          done
+
+          exit "$fail"

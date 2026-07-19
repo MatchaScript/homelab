@@ -1,0 +1,75 @@
+# Verification matrix for images/base images consumed by containers/bootc/**
+# and containers/base/**. One entry = "if any watch_paths changed, extract
+# <pin_env_key|pin_from_stage> from pin_source, build containerfile with it,
+# and smoke test the result." See docs/homelab/ARCHITECTURE.md for the design.
+#
+# runs_on defaults to ubuntu-24.04 (amd64) when omitted.
+
+- key: fedora-bootc
+  watch_paths:
+    - containers/bootc/base/fedora.Containerfile
+    - .github/workflows/build-bootc.yml
+  pin_source: .github/workflows/build-bootc.yml
+  pin_env_key: BOOTC_BASE
+  containerfile: containers/bootc/base/fedora.Containerfile
+  build_arg: BOOTC_BASE
+
+- key: asahi-bootc
+  watch_paths:
+    - containers/bootc/base/asahi.Containerfile
+    - .github/workflows/build-bootc.yml
+  pin_source: .github/workflows/build-bootc.yml
+  pin_env_key: BOOTC_BASE
+  containerfile: containers/bootc/base/asahi.Containerfile
+  build_arg: BOOTC_BASE
+  runs_on: ubuntu-24.04-arm
+
+- key: fedora
+  watch_paths:
+    - containers/base/default.Containerfile
+    - .github/workflows/build-fedora.yml
+  pin_source: .github/workflows/build-fedora.yml
+  pin_env_key: SYSBASE
+  containerfile: containers/base/default.Containerfile
+  build_arg: SYSBASE
+
+- key: fedora-minimal
+  watch_paths:
+    - containers/bootc/kubernetes/base.Containerfile
+  pin_source: containers/bootc/kubernetes/base.Containerfile
+  pin_from_stage: kubeadm-downloader
+  containerfile: containers/bootc/kubernetes/base.Containerfile
+  build_target: kubeadm-downloader
+
+- key: kubernetes-on-fedora-bootc
+  watch_paths:
+    - .github/workflows/build-kubernetes.yml
+  pin_source: .github/workflows/build-kubernetes.yml
+  pin_env_key: SYSBASE_AMD64
+  containerfile: containers/bootc/kubernetes/base.Containerfile
+  build_arg: SYSBASE
+
+- key: kubernetes-on-asahi-bootc
+  watch_paths:
+    - .github/workflows/build-kubernetes.yml
+  pin_source: .github/workflows/build-kubernetes.yml
+  pin_env_key: SYSBASE_ASAHI
+  containerfile: containers/bootc/kubernetes/base.Containerfile
+  build_arg: SYSBASE
+  runs_on: ubuntu-24.04-arm
+
+- key: development-on-fedora-bootc
+  watch_paths:
+    - .github/workflows/build-development.yml
+  pin_source: .github/workflows/build-development.yml
+  pin_env_key: DEV_BASE
+  containerfile: containers/bootc/development/base.Containerfile
+  build_arg: DEV_BASE
+
+- key: gha-runner-on-fedora
+  watch_paths:
+    - .github/workflows/build-gha-runner.yml
+  pin_source: .github/workflows/build-gha-runner.yml
+  pin_env_key: FEDORA_BASE
+  containerfile: containers/gha-runner/base.Containerfile
+  build_arg: BASE_IMAGE
