@@ -255,6 +255,8 @@ jobs:
           fi
 
       - name: Run chainsaw test
+        env:
+          CHART_DIR: ${{ github.workspace }}/charts/${{ matrix.chart }}
         run: |
           chainsaw test \
             --config "charts/${{ matrix.chart }}/test/chainsaw.yaml" \
