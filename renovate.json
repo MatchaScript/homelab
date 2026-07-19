@@ -54,19 +54,39 @@
   ],
   "packageRules": [
     {
-      "description": "Auto-merge fedora-bootc base image digest bumps (gated by the Verify Base Images check). Scoped to this dep only for now; other updates stay manual. NOTE: this trusts the official Fedora upstream (quay.io/fedora/fedora-bootc); the gate is a build+smoke check, not an upstream-provenance check (Fedora does not sigstore-sign these images), so this is an accepted-risk auto-merge.",
+      "description": "Auto-merge digest/patch updates in files covered by CI Gate (build+smoke for images, kind+chainsaw e2e for charts; see .github/image-manifest.yml and .github/chart-filters.yml). Kept in exact 1:1 sync with those two manifests: a broader glob here would let an unverified pin bump auto-merge on a green gate. Datasources are restricted to docker/helm because those are what CI actually verifies; e.g. an actions/runner github-releases bump in build-gha-runner.yml is not exercised by the verify build and must not auto-merge. NOTE: this trusts the upstream registries each build pulls FROM (e.g. quay.io/fedora does not sigstore-sign its images); the gate is a build+smoke/e2e check, not a provenance check, so this is an accepted-risk auto-merge.",
+      "matchDatasources": [
+        "docker",
+        "helm"
+      ],
+      "matchFileNames": [
+        ".github/workflows/build-bootc.yml",
+        ".github/workflows/build-fedora.yml",
+        ".github/workflows/build-kubernetes.yml",
+        ".github/workflows/build-development.yml",
+        ".github/workflows/build-gha-runner.yml",
+        "containers/bootc/kubernetes/base.Containerfile",
+        "charts/cnpg-cluster/**",
+        "charts/powerdns/**",
+        "charts/vault-eso/**",
+        "charts/vaultwarden/**"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Exclude self-built ghcr.io/matchascript/* images from auto-merge even though their pins live in files covered by the rule above. CI Gate verifies the consumer build still succeeds against the new digest, but it is not a provenance check on our own supply chain, so rollout timing stays a human decision (mirrors aatchison/hummingbird-k8s's explicit automerge:false for base image digest bumps).",
       "matchDatasources": [
         "docker"
       ],
       "matchPackageNames": [
-        "quay.io/fedora/fedora-bootc"
+        "ghcr.io/matchascript/**"
       ],
-      "matchUpdateTypes": [
-        "digest",
-        "pin"
-      ],
-      "automerge": true,
-      "automergeType": "pr"
+      "automerge": false
     },
     {
       "description": "Group all Helm chart updates together",
