@@ -3,7 +3,7 @@ ARG SYSBASE
 ARG KUBEADM_VERSION="v1.35"
 
 # Stage 1: Download kubeadm binary
-FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:ba10782ca828609a63b4f4f8f91a84d8ecb6f3a376d23deec8a2172e06c40c73 AS kubeadm-downloader
+FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:845561bf31de02a314573119ca54e85c5950115636a9508021d0eb1287b6c963 AS kubeadm-downloader
 ARG KUBEADM_VERSION
 ARG TARGETARCH # arm64 or amd64
 RUN microdnf install -y curl && \
