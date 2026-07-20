@@ -79,7 +79,7 @@
       "automergeType": "pr"
     },
     {
-      "description": "Exclude self-built ghcr.io/matchascript/* images from auto-merge even though their pins live in files covered by the rule above. CI Gate verifies the consumer build still succeeds against the new digest, but it is not a provenance check on our own supply chain, so rollout timing stays a human decision (mirrors aatchison/hummingbird-k8s's explicit automerge:false for base image digest bumps).",
+      "description": "Exclude self-built ghcr.io/matchascript/* images from auto-merge even though their pins live in files covered by the rule above. CI Gate verifies the consumer build still succeeds against the new digest, but it is not a provenance check on our own supply chain, so rollout timing stays a human decision.",
       "matchDatasources": [
         "docker"
       ],
