@@ -42,7 +42,6 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     tuned \
     zswap-cli \
     sudo \
-    vim \
     nano \
     bubblewrap \
     openssh-server \

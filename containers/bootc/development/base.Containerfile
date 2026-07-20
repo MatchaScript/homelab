@@ -31,7 +31,7 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
     jq uv rustup ripgrep fd-find fzf btop openssh-clients openssh-server \
     fastfetch kubernetes-client k9s kind kustomize tar tuned btrfs-progs @development-tools \
     qemu-system-x86-core qemu-img \
-    zswap-cli \
+    zswap-cli bcvk\
     && dnf clean all
 
 
