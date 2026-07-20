@@ -8,6 +8,7 @@
 - key: fedora-bootc
   watch_paths:
     - containers/bootc/base/fedora.Containerfile
+    - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
   pin_source: .github/workflows/build-bootc.yml
   pin_env_key: BOOTC_BASE
@@ -17,6 +18,7 @@
 - key: asahi-bootc
   watch_paths:
     - containers/bootc/base/asahi.Containerfile
+    - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
   pin_source: .github/workflows/build-bootc.yml
   pin_env_key: BOOTC_BASE
