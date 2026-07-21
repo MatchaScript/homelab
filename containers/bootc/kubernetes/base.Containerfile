@@ -36,6 +36,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     kubelet \
     kubectl \
     crun \
+    crun-krun \
     container-selinux \
     libseccomp \
     dbus-daemon \
