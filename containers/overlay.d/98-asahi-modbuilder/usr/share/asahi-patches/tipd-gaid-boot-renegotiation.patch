@@ -1,0 +1,65 @@
+tipd: force ACE (CD321x) renegotiation for plugs present at probe
+
+On Apple Silicon Macs, a USB3 device that is already plugged into a
+USB-C port when Linux boots never link-trains: the xHCI port stays in
+RxDetect forever because the CD321x ("ACE") PD controller firmware
+negotiated the connection before the host PHY stack existed, and in
+that state the external SuperSpeed path (which includes an on-board
+retimer the host cannot reach in USB3 mode) does not present far-end
+termination to the host. A physical replug always recovers, purely via
+the generic hotplug path. macOS avoids this by renegotiating PD once
+when its own ACE driver loads at OS handoff.
+
+Fix: at the end of tps6598x_probe(), if a plug is already present on an
+apple,cd321x port, issue the 4CC "GAID" command (controller cold reset)
+and restore system power state S0. The ACE then renegotiates from
+scratch and delivers a fresh PLUG_EVENT to the now-ready driver, and the
+standard hotplug path (mux -> PHY -> dwc3 -> xHCI -> warm port reset ->
+U0) brings the link up with no physical intervention.
+
+Verified on Mac mini M1 (macmini-03): 3x warm reboot + 1x cold boot,
+both ports, both cable orientations. Full investigation, raw traces and
+adversarial review: docs/asahi/usb3-gaid-resolution-2026-07-22.md in the
+workspace docs (MatchaScript internal).
+
+Generated against kernel-16k 7.0.13-400.asahi (src.rpm source tree).
+Applied with `patch -p1 --fuzz=0`; an application failure on a kernel
+bump is intentional rot-check behavior — rebase this patch or drop it if
+an equivalent fix has landed upstream.
+
+--- a/drivers/usb/typec/tipd/core.c
++++ b/drivers/usb/typec/tipd/core.c
+@@ -1860,6 +1860,33 @@
+ 	if (ret)
+ 		goto err_disconnect;
+ 
++	/*
++	 * Apple ACE (CD321x): a plug already present at probe time never
++	 * USB3-link-trains because the firmware negotiated the connection
++	 * before the host PHY existed; only a fresh negotiation makes the
++	 * external SuperSpeed path pass far-end termination. Cold-reset the
++	 * firmware (GAID) so the resulting PLUG_EVENT replays through the
++	 * normal hotplug path with the host stack ready.
++	 */
++	if (device_is_compatible(tps->dev, "apple,cd321x") &&
++	    (status & TPS_STATUS_PLUG_PRESENT)) {
++		int gaid_tries = 5;
++
++		dev_info(tps->dev, "plug present at probe; GAID reset to renegotiate\n");
++		ret = tps6598x_write_4cc(tps, TPS_REG_CMD1, "GAID");
++		if (ret)
++			dev_warn(tps->dev, "GAID write failed: %d\n", ret);
++		msleep(1000);
++		while (gaid_tries--) {
++			ret = tps->data->switch_power_state(tps, TPS_SYSTEM_POWER_STATE_S0);
++			if (!ret)
++				break;
++			msleep(200);
++		}
++		if (ret)
++			dev_warn(tps->dev, "S0 restore after GAID failed: %d\n", ret);
++	}
++
+ 	i2c_set_clientdata(client, tps);
+ 	fwnode_handle_put(fwnode);
+ 
