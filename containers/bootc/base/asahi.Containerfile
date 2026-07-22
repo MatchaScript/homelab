@@ -108,6 +108,28 @@ set -euo pipefail
 KVER=$(rpm -ql kernel-16k-core | sed -n 's#^\(/usr\)\?/lib/modules/\([^/]*\)/vmlinuz$#\2#p' | head -n1)
 [ -n "$KVER" ] || { echo "ERROR: cannot determine kernel version from kernel-16k-core" >&2; exit 1; }
 depmod -a "$KVER"
+
+# Regenerate the initramfs: it carries its own copy of tps6598x, which
+# loads in early boot and would otherwise shadow the patched module on
+# the root fs for the entire lifetime of the system. Plain dracut is
+# used on purpose: kernel-install would run the asahi m1n1 hook, which
+# needs an ESP and cannot work at image-build time.
+INITRD="/usr/lib/modules/${KVER}/initramfs.img"
+# /root is a symlink to /var/roothome, which does not exist at image
+# build time; dracut fails on the dangling symlink without this.
+mkdir -p /var/roothome
+dracut --force --no-hostonly "$INITRD" "$KVER"
+rmdir /var/roothome
+[ -f "$INITRD" ] || { echo "ERROR: dracut did not produce ${INITRD}" >&2; exit 1; }
+
+# The initramfs copy must be byte-identical to the patched module on
+# the root fs, or early boot will load the stock driver and shadow it.
+MODPATH="usr/lib/modules/${KVER}/kernel/drivers/usb/typec/tipd/tps6598x.ko.xz"
+if ! lsinitrd -f "$MODPATH" "$INITRD" | cmp -s - "/${MODPATH}"; then
+    echo "ERROR: regenerated initramfs does not carry the patched tps6598x" >&2
+    exit 1
+fi
+
 bootc container lint
 EOF
 
