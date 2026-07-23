@@ -37,7 +37,7 @@ env:
   NAMESPACE: matchascript
   IMAGE: kubernetes
   # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
-  SYSBASE_AMD64: "ghcr.io/matchascript/fedora-bootc:latest@sha256:8e264b4e38a9ccd1974c853b47015c94cce17f102c8d6dc6714b800694e4d42e"
+  SYSBASE_AMD64: "ghcr.io/matchascript/fedora-bootc:latest@sha256:0ee12e90072c4aa500a8c9060535d0d002f94156949045a82d54741af1a525af"
   # renovate: datasource=docker depName=ghcr.io/matchascript/asahi-bootc
   SYSBASE_ASAHI: "ghcr.io/matchascript/asahi-bootc:latest@sha256:154514a4469ed0531ad209c603dc955a7e8ba1188d516414e3e15826115ca2ce"
   KUBERNETES_VERSION_DEFAULT: "v1.36"
