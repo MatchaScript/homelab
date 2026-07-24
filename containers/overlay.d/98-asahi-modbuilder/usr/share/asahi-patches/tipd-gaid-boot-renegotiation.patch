@@ -17,8 +17,10 @@ scratch and delivers a fresh PLUG_EVENT to the now-ready driver, and the
 standard hotplug path (mux -> PHY -> dwc3 -> xHCI -> warm port reset ->
 U0) brings the link up with no physical intervention.
 
-Verified on Mac mini M1: 2x warm reboot + 1x cold boot, both ports,
-both cable orientations.
+Verified on Mac mini M1 (macmini-03): 3x warm reboot + 1x cold boot,
+both ports, both cable orientations. Full investigation, raw traces and
+adversarial review: docs/asahi/usb3-gaid-resolution-2026-07-22.md in the
+workspace docs (MatchaScript internal).
 
 Generated against kernel-16k 7.0.13-400.asahi (src.rpm source tree).
 Applied with `patch -p1 --fuzz=0`; an application failure on a kernel
