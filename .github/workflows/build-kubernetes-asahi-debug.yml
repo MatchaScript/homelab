@@ -1,4 +1,4 @@
-name: Build Debug Bootc Images
+name: Build Kubernetes Asahi Debug Image
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   NAMESPACE: matchascript
-  IMAGE: asahi-debug
+  IMAGE: kubernetes-asahi-debug
   # renovate: datasource=docker depName=ghcr.io/matchascript/kubernetes
   SYSBASE: "ghcr.io/matchascript/kubernetes:latest-asahi"
   CONTEXT_DIR: ./containers
@@ -73,10 +73,10 @@ jobs:
           fi
 
   # ════════════════════════════════════════════════════
-  #  Build asahi-debug — arm64 only
+  #  Build kubernetes-asahi-debug — arm64 only
   # ════════════════════════════════════════════════════
   build-debug:
-    name: Build asahi-debug (arm64)
+    name: Build kubernetes-asahi-debug (arm64)
     runs-on: ubuntu-24.04-arm
     needs: prepare
     steps:
@@ -99,7 +99,7 @@ jobs:
         uses: ./.github/actions/oci-labels
         with:
           title: ${{ env.IMAGE }}
-          description: "Asahi debug/instrumentation bootc image (atc.c out-of-tree rebuild tooling)"
+          description: "Kubernetes-asahi bootc image with debug/instrumentation tooling (atc.c out-of-tree rebuild tooling)"
           version: "${{ needs.prepare.outputs.current_date }}"
           base_name: ${{ env.SYSBASE }}
 
@@ -120,7 +120,7 @@ jobs:
             --device /dev/fuse \
             --build-arg SYSBASE="${{ env.SYSBASE }}" \
             "${LABEL_ARGS[@]}" \
-            --tag temp-asahi-debug \
+            --tag temp-kubernetes-asahi-debug \
             -f ${{ env.CONTEXT_DIR }}/bootc/debug/asahi.Containerfile \
             ${{ env.CONTEXT_DIR }}
 
@@ -132,9 +132,9 @@ jobs:
             -v /var/lib/containers:/var/lib/containers:z \
             quay.io/centos-bootc/centos-bootc:stream10 \
             /usr/libexec/bootc-base-imagectl rechunk \
-            localhost/temp-asahi-debug:latest localhost/rechunked-temp-asahi-debug:latest
-          sudo podman tag localhost/rechunked-temp-asahi-debug:latest localhost/temp-asahi-debug:latest
-          sudo podman rmi localhost/rechunked-temp-asahi-debug:latest
+            localhost/temp-kubernetes-asahi-debug:latest localhost/rechunked-temp-kubernetes-asahi-debug:latest
+          sudo podman tag localhost/rechunked-temp-kubernetes-asahi-debug:latest localhost/temp-kubernetes-asahi-debug:latest
+          sudo podman rmi localhost/rechunked-temp-kubernetes-asahi-debug:latest
 
       - name: Login to registry
         if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
@@ -145,7 +145,7 @@ jobs:
         if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
         run: |
           for tag in $(echo "${{ steps.tags.outputs.tags }}" | tr ',' ' '); do
-            sudo podman tag temp-asahi-debug "${tag}"
+            sudo podman tag temp-kubernetes-asahi-debug "${tag}"
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
