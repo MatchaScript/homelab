@@ -176,7 +176,7 @@ jobs:
 
       - name: Build Image
         id: build_image
-        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2
+        uses: redhat-actions/buildah-build@5d8479758cc72ed82df28daba521d27e20ff8c8a # v3
         with:
           context: ./containers
           containerfiles: ./containers/base/${{ matrix.variant }}.Containerfile
@@ -190,7 +190,7 @@ jobs:
       - name: Push to Registry
         id: push_image
         if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
-        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3
         with:
           image: ${{ steps.build_image.outputs.image }}
           tags: ${{ steps.build_image.outputs.tags }}
