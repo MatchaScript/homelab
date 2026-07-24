@@ -15,7 +15,8 @@ COPY --from=builder /tmp/tuxvdmtool-src/target/release/tuxvdmtool /usr/local/bin
 RUN chmod 0755 /usr/local/bin/tuxvdmtool && tuxvdmtool --version
 
 RUN <<EOF
-dnf install i2c-tools pciutils usbutils tar @development-tools \
+set -euo pipefail
+dnf install -y i2c-tools pciutils usbutils tar @development-tools \
     util-linux trace-cmd bpftrace uv git
 dnf clean all && rm -rf /var/cache/dnf
 bootc container lint
