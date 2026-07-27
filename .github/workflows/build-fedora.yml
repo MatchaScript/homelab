@@ -36,7 +36,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: matchascript/fedora
   # renovate: datasource=docker depName=quay.io/fedora/fedora
-  SYSBASE: "quay.io/fedora/fedora:latest@sha256:c64fc79f4a12dd4625d8cba9f7d242ac17c823bdeecc6d650234ebbf5f0ca81b"
+  SYSBASE: "quay.io/fedora/fedora:latest@sha256:be475943cd9eda1d6b6db353725a944da8bb85628c7316799229fddf76c183ff"
 
 jobs:
   # ════════════════════════════════════════════════════
