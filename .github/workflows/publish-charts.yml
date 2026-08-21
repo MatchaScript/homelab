@@ -27,7 +27,7 @@ defaults:
 jobs:
   detect-changes:
     name: Detect changed charts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     outputs:
       charts: ${{ steps.collect.outputs.charts }}
     steps:
