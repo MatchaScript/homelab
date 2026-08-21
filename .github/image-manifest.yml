@@ -7,6 +7,7 @@
 
 - key: fedora-bootc
   watch_paths:
+    - .github/actions/setup-podman/
     - containers/bootc/base/fedora.Containerfile
     - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
@@ -17,6 +18,7 @@
 
 - key: asahi-bootc
   watch_paths:
+    - .github/actions/setup-podman/
     - containers/bootc/base/asahi.Containerfile
     - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
@@ -28,6 +30,7 @@
 
 - key: fedora
   watch_paths:
+    - .github/actions/setup-podman/
     - containers/base/default.Containerfile
     - .github/workflows/build-fedora.yml
   pin_source: .github/workflows/build-fedora.yml
@@ -37,6 +40,7 @@
 
 - key: fedora-minimal
   watch_paths:
+    - .github/actions/setup-podman/
     - containers/bootc/kubernetes/base.Containerfile
   pin_source: containers/bootc/kubernetes/base.Containerfile
   pin_from_stage: kubeadm-downloader
@@ -45,6 +49,7 @@
 
 - key: kubernetes-on-fedora-bootc
   watch_paths:
+    - .github/actions/setup-podman/
     - .github/workflows/build-kubernetes.yml
   pin_source: .github/workflows/build-kubernetes.yml
   pin_env_key: SYSBASE_AMD64
@@ -53,6 +58,7 @@
 
 - key: kubernetes-on-asahi-bootc
   watch_paths:
+    - .github/actions/setup-podman/
     - .github/workflows/build-kubernetes.yml
   pin_source: .github/workflows/build-kubernetes.yml
   pin_env_key: SYSBASE_ASAHI
@@ -62,6 +68,7 @@
 
 - key: development-on-fedora-bootc
   watch_paths:
+    - .github/actions/setup-podman/
     - .github/workflows/build-development.yml
   pin_source: .github/workflows/build-development.yml
   pin_env_key: DEV_BASE
@@ -70,6 +77,7 @@
 
 - key: gha-runner-on-fedora
   watch_paths:
+    - .github/actions/setup-podman/
     - .github/workflows/build-gha-runner.yml
   pin_source: .github/workflows/build-gha-runner.yml
   pin_env_key: FEDORA_BASE
