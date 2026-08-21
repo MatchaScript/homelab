@@ -1,10 +1,30 @@
 name: "Setup Podman"
-description: "Report the runner's preinstalled container tools (Podman 5.x ships with the runner image since 20260810)."
+description: "Use the runner's preinstalled Podman 5.x with native overlay diff restored."
 
 runs:
   using: "composite"
   steps:
-    - name: Report container tool versions
+    # Runner images since 20260810 ship a preseeded /var/lib/containers/storage
+    # whose .has-mount-program flag forces the fuse-overlayfs path, and their
+    # 6.17 azure kernel enables overlay redirect_dir, which fails the native
+    # diff probe on default mount options. Either one alone drops every layer
+    # commit to a full-tree naive diff (~95s per layer on a 3GB base; ~100x
+    # slower than native). Fresh storage + redirect_dir=off restores native
+    # diff; both are required.
+    - name: Restore native overlay diff
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo rm -rf /var/lib/containers/storage /run/containers/storage
+        sudo mkdir -p /etc/containers
+        sudo tee /etc/containers/storage.conf <<'EOF'
+        [storage]
+        driver = "overlay"
+        [storage.options.overlay]
+        mountopt = "redirect_dir=off"
+        EOF
+
+    - name: Report container tools and storage
       shell: bash
       run: |
         set -euo pipefail
@@ -12,4 +32,4 @@ runs:
         podman version
         buildah --version
         skopeo --version
-        sudo podman info --format 'graph driver: {{.Store.GraphDriverName}}'
+        sudo podman info --format '{{range $k, $v := .Store.GraphStatus}}{{$k}}: {{$v}}{{"\n"}}{{end}}'
