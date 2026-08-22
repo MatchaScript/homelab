@@ -38,7 +38,7 @@ env:
   FEDORA_IMAGE: fedora-bootc
   ASAHI_IMAGE: asahi-bootc
   # renovate: datasource=docker depName=quay.io/fedora/fedora-bootc
-  BOOTC_BASE: "quay.io/fedora/fedora-bootc:latest@sha256:aa286e6cb122f57c68db4e6d23fccc690e1b051751b3d57625bafe25766fc376"
+  BOOTC_BASE: "quay.io/fedora/fedora-bootc:latest@sha256:3a5e74e668761be9e16c6779950ae154d9dcbb0861d1e92140c0751fed1f5357"
   CONTEXT_DIR: ./containers
 
 jobs:
