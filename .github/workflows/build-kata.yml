@@ -72,7 +72,7 @@ jobs:
           PUSH_TO_REGISTRY: "no"
           USE_DEVMAPPER: ${{ matrix.asset == 'agent' && 'yes' || 'no' }}
 
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kata-asset-${{ matrix.asset }}-${{ matrix.arch }}
           path: kata-build/kata-static-${{ matrix.asset }}.tar.zst
@@ -102,7 +102,7 @@ jobs:
           ref: ${{ inputs.kata_ref }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: kata-asset-*-${{ matrix.arch }}
           path: kata-artifacts
@@ -121,7 +121,7 @@ jobs:
           ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           PUSH_TO_REGISTRY: "no"
 
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kata-asset-rootfs-image-${{ matrix.arch }}
           path: kata-build/kata-static-rootfs-image.tar.zst
@@ -162,7 +162,7 @@ jobs:
           ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
           PUSH_TO_REGISTRY: "no"
 
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kata-asset-shim-v2-go-${{ matrix.arch }}
           path: kata-build/kata-static-shim-v2-go.tar.zst
@@ -180,13 +180,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: kata-asset-*-amd64
           path: kata-tarballs/amd64
           merge-multiple: true
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: kata-asset-*-arm64
           path: kata-tarballs/arm64
