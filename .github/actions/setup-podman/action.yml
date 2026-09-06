@@ -1,5 +1,5 @@
 name: "Setup Podman"
-description: "Use the runner's preinstalled Podman 5.x with native overlay diff restored."
+description: "Use the runner's preinstalled Podman with native overlay diff restored."
 
 runs:
   using: "composite"
@@ -11,6 +11,11 @@ runs:
     # commit to a full-tree naive diff (~95s per layer on a 3GB base; ~100x
     # slower than native). Fresh storage + redirect_dir=off restores native
     # diff; both are required.
+    #
+    # storage.conf replaces the distro default instead of merging into it, so
+    # the store roots have to be spelled out. Podman 4.9.3, back on the runner
+    # images since 20260828, errors with "runroot must be set" without them;
+    # the bundled 5.8.4 filled them in.
     - name: Restore native overlay diff
       shell: bash
       run: |
@@ -20,6 +25,8 @@ runs:
         sudo tee /etc/containers/storage.conf <<'EOF'
         [storage]
         driver = "overlay"
+        runroot = "/run/containers/storage"
+        graphroot = "/var/lib/containers/storage"
         [storage.options.overlay]
         mountopt = "redirect_dir=off"
         EOF
