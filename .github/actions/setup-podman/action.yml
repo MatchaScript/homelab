@@ -31,6 +31,21 @@ runs:
         mountopt = "redirect_dir=off"
         EOF
 
+    # Ubuntu's bwrap-userns-restrict profile attaches by path, so it also
+    # catches /usr/bin/bwrap inside the build container. bwrap execs into
+    # bwrap//&unpriv_bwrap, which denies dac_override and dac_read_search, and
+    # rpm-ostree's systemd-sysusers step then cannot read the mode 0000
+    # /etc/gshadow, so every build-rootfs fails. --security-opt
+    # apparmor=unconfined does not cover it: the container process is
+    # unconfined, but the exec transition into the profile still happens.
+    - name: Unload the bwrap AppArmor profile
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -f /etc/apparmor.d/bwrap-userns-restrict ]; then
+          sudo apparmor_parser -R /etc/apparmor.d/bwrap-userns-restrict
+        fi
+
     - name: Report container tools and storage
       shell: bash
       run: |
