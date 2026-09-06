@@ -1,5 +1,7 @@
 # Artifact-only image holding the kata-containers install tree. Build context is
-# the directory .github/workflows/build-kata.yml unpacked the tarballs into.
+# the directory .github/workflows/build-kata.yml unpacked the tarballs into, one
+# subdirectory per architecture.
 FROM scratch
 
-COPY opt/kata /opt/kata
+ARG TARGETARCH
+COPY ${TARGETARCH}/opt/kata /opt/kata
