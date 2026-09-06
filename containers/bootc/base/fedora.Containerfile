@@ -2,11 +2,9 @@ ARG BOOTC_BASE
 FROM ${BOOTC_BASE} AS builder
 ARG TARGETARCH='amd64'
 
-# Wrap bwrap to retain capabilities (e.g. CAP_DAC_OVERRIDE) so systemd-sysusers
-# inside bubblewrap can access mode-0000 shadow files during build-rootfs.
-RUN mv /usr/bin/bwrap /usr/bin/bwrap.real && \
-    printf '#!/bin/bash\nexec /usr/bin/bwrap.real --cap-add CAP_DAC_OVERRIDE "$@"\n' > /usr/bin/bwrap && \
-    chmod +x /usr/bin/bwrap
+# Skip compose-time systemd-sysusers in bwrap, avoiding Permission denied on mode-0000 /etc/gshadow
+RUN sed -i '1i sysusers: none' /usr/share/doc/bootc-base-imagectl/manifests/fedora-minimal.yaml \
+    /usr/share/doc/bootc-base-imagectl/manifests/minimal/manifest.yaml 2>/dev/null || true
 RUN /usr/libexec/bootc-base-imagectl build-rootfs --manifest=fedora-minimal /target-rootfs
 RUN mkdir -p /target-rootfs/usr/lib/selinux/targeted && \
     mv /target-rootfs/etc/selinux/targeted/active /target-rootfs/usr/lib/selinux/targeted/ && \

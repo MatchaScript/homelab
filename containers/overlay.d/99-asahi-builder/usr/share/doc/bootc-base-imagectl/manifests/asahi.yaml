@@ -1,3 +1,4 @@
+sysusers: none
 include:
   - ./minimal/manifest.yaml
 packages:
