@@ -39,7 +39,7 @@ jobs:
   # ════════════════════════════════════════════════════
   prepare:
     name: Prepare Build Environment
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       current_date: ${{ steps.compute.outputs.current_date }}
       version_id: ${{ steps.compute.outputs.version_id }}
@@ -90,7 +90,7 @@ jobs:
   # ════════════════════════════════════════════════════
   build:
     name: Build development image (amd64)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: prepare
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
