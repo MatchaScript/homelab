@@ -15,6 +15,13 @@ COPY --from=builder /target-rootfs/ /
 COPY overlay.d/01-common/ /
 COPY overlay.d/01-growpart/ /
 RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs cloud-utils-growpart
+# Regenerate the file contexts so genhomedircon picks up HOME=/var/home from
+# overlay.d/01-common/etc/default/useradd.  Without this the home rules stay
+# under /home while subs_dist sends lookups to /var/home, and everything below
+# /var/home falls through to var_t.
+RUN semodule -B && \
+    F=/etc/selinux/targeted/contexts/files/file_contexts.homedirs && \
+    grep -qE '^/var/home/' "$F" && ! grep -qE '^/home/' "$F"
 RUN <<EOF
 set -xeuo pipefail
 dnf clean all && rm -rf /var/cache/dnf

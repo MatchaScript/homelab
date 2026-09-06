@@ -9,6 +9,7 @@
   watch_paths:
     - .github/actions/setup-podman/
     - containers/bootc/base/fedora.Containerfile
+    - containers/overlay.d/01-common/
     - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
   pin_source: .github/workflows/build-bootc.yml
@@ -20,6 +21,7 @@
   watch_paths:
     - .github/actions/setup-podman/
     - containers/bootc/base/asahi.Containerfile
+    - containers/overlay.d/01-common/
     - containers/overlay.d/01-growpart/
     - .github/workflows/build-bootc.yml
   pin_source: .github/workflows/build-bootc.yml
