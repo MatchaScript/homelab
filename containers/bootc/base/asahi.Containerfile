@@ -53,6 +53,13 @@ COPY overlay.d/50-asahi/ /
 COPY --from=uboot /tmp/uboot-evr /tmp/uboot-evr
 COPY --from=uboot /tmp/u-boot-nodtb.bin /usr/share/uboot/apple_m1/u-boot-nodtb.bin
 RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs cloud-utils-growpart
+# Regenerate the file contexts so genhomedircon picks up HOME=/var/home from
+# overlay.d/01-common/etc/default/useradd.  Without this the home rules stay
+# under /home while subs_dist sends lookups to /var/home, and everything below
+# /var/home falls through to var_t.
+RUN semodule -B && \
+    F=/etc/selinux/targeted/contexts/files/file_contexts.homedirs && \
+    grep -qE '^/var/home/' "$F" && ! grep -qE '^/home/' "$F"
 RUN <<EOF
 set -eux
 test "$(rpm -q --qf '%{EVR}' uboot-images-armv8)" = "$(cat /tmp/uboot-evr)"
