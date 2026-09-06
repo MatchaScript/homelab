@@ -61,7 +61,7 @@ RUN sed -e 's|^#mount_program|mount_program|g' \
     /usr/share/containers/storage.conf \
     > /etc/containers/storage.conf
 
-RUN cat <<EOF > /etc/containers/containers.conf
+RUN cat <<'EOF' > /etc/containers/containers.conf
 [containers]
 cgroups="disabled"
 log_driver = "k8s-file"
