@@ -1,6 +1,8 @@
 # Global build arguments
 ARG SYSBASE
 ARG KUBEADM_VERSION="v1.35"
+# Built by .github/workflows/build-kata.yml from the netkit L3 fork
+ARG KATA_REF="90559846d48d799ae1d5c3da8dfb00822528a1b7"
 
 # Stage 1: Download kubeadm binary
 FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:1f4d147e7787705a2a93d74de0772aef86866d19c1b40982573c23bede20fce2 AS kubeadm-downloader
@@ -12,7 +14,11 @@ RUN microdnf install -y curl && \
     curl -L -o /opt/bin/kubeadm "https://dl.k8s.io/release/${RELEASE}/bin/linux/${TARGETARCH}/kubeadm" && \
     chmod +x /opt/bin/kubeadm
 
-# Stage 2: Main bootc image
+# Stage 2: kata-containers install tree
+ARG KATA_REF
+FROM ghcr.io/matchascript/kata-artifacts:${KATA_REF} AS kata
+
+# Stage 3: Main bootc image
 FROM ${SYSBASE}
 
 ARG KUBERNETES_VERSION="v1.35"
@@ -59,6 +65,12 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 
 # Copy kubeadm from downloader stage
 COPY --from=kubeadm-downloader /opt/bin/kubeadm /usr/bin/kubeadm
+
+# cri-o reaches the shim, hypervisor and guest assets under /opt/kata by
+# absolute path; only the CLI needs to be on PATH
+COPY --from=kata /opt/kata /opt/kata
+RUN ln -s /opt/kata/bin/kata-runtime /usr/bin/kata-runtime && \
+    command -v kata-runtime
 RUN systemctl enable tuned && \
     systemctl enable systemd-networkd && \
     systemctl enable sshd && \
