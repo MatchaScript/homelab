@@ -61,14 +61,7 @@ RUN sed -e 's|^#mount_program|mount_program|g' \
     /usr/share/containers/storage.conf \
     > /etc/containers/storage.conf
 
-RUN cat <<EOF > /etc/containers/containers.conf
-[containers]
-cgroups="disabled"
-log_driver = "k8s-file"
-[engine]
-events_logger="file"
-runtime="crun"
-EOF
+RUN printf '[containers]\ncgroups="disabled"\nlog_driver = "k8s-file"\n[engine]\nevents_logger="file"\nruntime="crun"\n' > /etc/containers/containers.conf
 
 # ── Stage 3: Final image ──────────────────────────────────────────────────────
 FROM scratch

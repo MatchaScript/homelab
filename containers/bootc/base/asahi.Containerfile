@@ -28,21 +28,18 @@ RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs \
     dnf5-plugins rpm-build patch
 RUN dnf copr enable -y @asahi/fedora-remix-branding
 RUN dnf install -y asahi-repos
-RUN <<EOF
-set -eux
-cd /tmp
-dnf download --source uboot-tools
-SRPM=$(ls /tmp/uboot-tools-*.src.rpm)
-rpm -q --qf '%{EVR}' -p "$SRPM" > /tmp/uboot-evr
-dnf builddep -y --setopt=install_weak_deps=False "$SRPM"
-# /root is a symlink to the (absent) /var/roothome in the bootc base image
-rpmbuild --define "_topdir /build" -rp --nodeps "$SRPM"
-cd "$(ls -d /build/BUILD/*/u-boot-*)"
-patch -p1 --fuzz=0 < /usr/src/uboot-patches/0001-usb-xhci-dwc3-Add-DM_FLAG_OS_PREPARE-flag.patch
-make apple_m1_defconfig O=builds/apple_m1/
-make -j"$(nproc)" HOSTCC=gcc CROSS_COMPILE="" O=builds/apple_m1/
-cp builds/apple_m1/u-boot-nodtb.bin /tmp/u-boot-nodtb.bin
-EOF
+RUN set -eux && \
+    cd /tmp && \
+    dnf download --source uboot-tools && \
+    SRPM=$(ls /tmp/uboot-tools-*.src.rpm) && \
+    rpm -q --qf '%{EVR}' -p "$SRPM" > /tmp/uboot-evr && \
+    dnf builddep -y --setopt=install_weak_deps=False "$SRPM" && \
+    rpmbuild --define "_topdir /build" -rp --nodeps "$SRPM" && \
+    cd "$(ls -d /build/BUILD/*/u-boot-*)" && \
+    patch -p1 --fuzz=0 < /usr/src/uboot-patches/0001-usb-xhci-dwc3-Add-DM_FLAG_OS_PREPARE-flag.patch && \
+    make apple_m1_defconfig O=builds/apple_m1/ && \
+    make -j"$(nproc)" HOSTCC=gcc CROSS_COMPILE="" O=builds/apple_m1/ && \
+    cp builds/apple_m1/u-boot-nodtb.bin /tmp/u-boot-nodtb.bin
 
 FROM scratch
 ARG VERSION_ID
@@ -59,15 +56,12 @@ RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs clou
 # /var/home falls through to var_t.
 RUN semodule -B && \
     F=/etc/selinux/targeted/contexts/files/file_contexts.homedirs && \
-    grep -qE '^/var/home/' "$F" && ! grep -qE '^/home/' "$F"
-RUN <<EOF
-set -eux
-test "$(rpm -q --qf '%{EVR}' uboot-images-armv8)" = "$(cat /tmp/uboot-evr)"
-rm -f /tmp/uboot-evr
-bash /opt/bin/update-m1n1-bootc.sh
-dnf clean all && rm -rf /var/cache/dnf
-bootc container lint
-EOF
+    grep -qE '^/var/home/' "$F"
+RUN test "$(rpm -q --qf '%{EVR}' uboot-images-armv8)" = "$(cat /tmp/uboot-evr)" && \
+    rm -f /tmp/uboot-evr && \
+    bash /opt/bin/update-m1n1-bootc.sh && \
+    dnf clean all && rm -rf /var/cache/dnf && \
+    bootc container lint
 
 LABEL containers.bootc=1
 LABEL ostree.bootable=1

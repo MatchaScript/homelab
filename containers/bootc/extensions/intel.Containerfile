@@ -6,9 +6,7 @@ RUN dnf install -y --setopt=install_weak_deps=False intel-lpmd && dnf clean all
 
 # Add kernel parameters
 RUN mkdir -p /usr/lib/bootc/kargs.d && \
-    cat <<EOF > /usr/lib/bootc/kargs.d/10-intel.toml
-kargs = ["intel_iommu=on", "iommu=pt"]
-EOF
+    printf 'kargs = ["intel_iommu=on", "iommu=pt"]\n' > /usr/lib/bootc/kargs.d/10-intel.toml
 
 LABEL org.opencontainers.image.title="kubernetes-intel"
 LABEL org.opencontainers.image.description="Kubernetes bootc image tuned for Intel CPUs (intel-lpmd, IOMMU)"

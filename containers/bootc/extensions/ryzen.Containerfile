@@ -3,9 +3,7 @@ FROM ${AMD64_BASE}
 
 # Add kernel parameters
 RUN mkdir -p /usr/lib/bootc/kargs.d && \
-    cat <<EOF > /usr/lib/bootc/kargs.d/10-amd.toml
-kargs = ["amd_iommu=on", "iommu=pt"]
-EOF
+    printf 'kargs = ["amd_iommu=on", "iommu=pt"]\n' > /usr/lib/bootc/kargs.d/10-amd.toml
 
 LABEL org.opencontainers.image.title="kubernetes-ryzen"
 LABEL org.opencontainers.image.description="Kubernetes bootc image tuned for AMD Ryzen CPUs (AMD IOMMU)"

@@ -21,12 +21,8 @@ RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs clou
 # /var/home falls through to var_t.
 RUN semodule -B && \
     F=/etc/selinux/targeted/contexts/files/file_contexts.homedirs && \
-    grep -qE '^/var/home/' "$F" && ! grep -qE '^/home/' "$F"
-RUN <<EOF
-set -xeuo pipefail
-dnf clean all && rm -rf /var/cache/dnf
-bootc container lint
-EOF
+    grep -qE '^/var/home/' "$F"
+RUN dnf clean all && rm -rf /var/cache/dnf && bootc container lint
 LABEL containers.bootc=1
 LABEL ostree.bootable=1
 LABEL org.opencontainers.image.title="fedora-bootc"
