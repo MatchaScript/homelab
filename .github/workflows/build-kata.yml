@@ -14,7 +14,7 @@ on:
       kata_ref:
         description: "Commit or branch to build"
         type: string
-        default: 90559846d48d799ae1d5c3da8dfb00822528a1b7
+        default: 9b6921e115b7ba4fee987a91beee14e57910165e
       push:
         description: "Push the artifact image to ghcr.io"
         type: boolean
