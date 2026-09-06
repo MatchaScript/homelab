@@ -30,7 +30,7 @@ env:
   HYPERV_IMAGE: fedora-development-hyperv
   DISK_IMAGE: fedora-development-disk
   # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
-  DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest@sha256:46cef34013e72f7a5a0ea237359ea5b9c49dc24c34228d03f4a16e628b1269be"
+  DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest@sha256:a7baf945ada9f9c56bb3bb812c887a592aeb36f15e9ddd9cad4c4fd8bd526620"
   CONTEXT_DIR: ./containers
 
 jobs:
