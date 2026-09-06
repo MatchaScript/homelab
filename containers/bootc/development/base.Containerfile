@@ -25,7 +25,7 @@ COPY overlay.d/10-vm-swapfile/ /
 
 # ── Platform toolchain (refined from homelab-classic/envbox-base) ──
 RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
-    zsh zsh-syntax-highlighting zsh-autosuggestions \
+    zsh zsh-syntax-highlighting zsh-autosuggestions glibc-langpack-en \
     systemd-networkd systemd-resolved bubblewrap tar nano vim \
     git-core gh sudo podman buildah skopeo chezmoi openbao opentofu helm \
     jq uv rustup ripgrep fd-find fzf btop openssh-clients openssh-server \
