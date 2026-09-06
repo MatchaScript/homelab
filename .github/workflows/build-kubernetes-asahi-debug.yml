@@ -33,7 +33,7 @@ jobs:
   # ════════════════════════════════════════════════════
   prepare:
     name: Prepare Build Environment
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-slim
     outputs:
       current_date: ${{ steps.set_date.outputs.current_date }}
       branch_name: ${{ steps.set_branch.outputs.branch_name }}
