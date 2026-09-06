@@ -11,6 +11,8 @@ RUN dnf copr enable -y @asahi/fedora-remix-branding
 RUN dnf install -y asahi-repos
 # replace kernel to kernel-16k /usr/share/doc/bootc-base-imagectl/manifests/minimal/kernel.yaml
 RUN sed -i 's/kernel/kernel-16k/g' /usr/share/doc/bootc-base-imagectl/manifests/minimal/kernel.yaml
+# Ensure shadow files are readable by systemd-sysusers inside bwrap during build-rootfs
+RUN touch /etc/gshadow && chmod 0640 /etc/gshadow /etc/shadow 2>/dev/null || true
 RUN /usr/libexec/bootc-base-imagectl build-rootfs --manifest=asahi /target-rootfs
 RUN mkdir -p /target-rootfs/usr/lib/selinux/targeted && \
     mv /target-rootfs/etc/selinux/targeted/active /target-rootfs/usr/lib/selinux/targeted/ && \
