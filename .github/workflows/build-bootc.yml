@@ -47,7 +47,7 @@ jobs:
   # ════════════════════════════════════════════════════
   prepare:
     name: Prepare Build Environment
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     outputs:
       current_date: ${{ steps.set_date.outputs.current_date }}
       version_id: ${{ steps.get_version.outputs.version_id }}
@@ -120,9 +120,9 @@ jobs:
         arch: [amd64, arm64]
         include:
           - arch: amd64
-            runner: ubuntu-26.04
+            runner: ubuntu-24.04
           - arch: arm64
-            runner: ubuntu-26.04-arm
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -209,7 +209,7 @@ jobs:
   # ── fedora-bootc base multi-arch manifest ─────────────
   manifest-base:
     name: Create fedora-bootc base manifest
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     needs: [prepare, build-base]
     if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'base' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
@@ -266,7 +266,7 @@ jobs:
   # ════════════════════════════════════════════════════
   build-hyperv:
     name: Build fedora-bootc hyperv (amd64)
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     needs: [prepare, manifest-base]
     if: ${{ (inputs.build_type == 'all' || inputs.build_type == 'hyperv' || github.event_name == 'schedule') && (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
@@ -354,7 +354,7 @@ jobs:
   # ════════════════════════════════════════════════════
   build-asahi:
     name: Build asahi-bootc (arm64)
-    runs-on: ubuntu-26.04-arm
+    runs-on: ubuntu-24.04-arm
     needs: prepare
     if: ${{ inputs.build_type == 'all' || inputs.build_type == 'asahi' || github.event_name == 'schedule' }}
     steps:

@@ -57,7 +57,7 @@ jobs:
               containerfile,
               build_arg: (.build_arg // null),
               build_target: (.build_target // null),
-              runs_on: (.runs_on // "ubuntu-26.04")
+              runs_on: (.runs_on // "ubuntu-24.04")
             }]' <<< "$MANIFEST_JSON")"
           else
             CHANGED="$(git diff --name-only "$BASE_SHA" HEAD)"
@@ -74,7 +74,7 @@ jobs:
                   containerfile,
                   build_arg: (.build_arg // null),
                   build_target: (.build_target // null),
-                  runs_on: (.runs_on // "ubuntu-26.04")
+                  runs_on: (.runs_on // "ubuntu-24.04")
                 }]
             ' <<< "$MANIFEST_JSON")"
           fi

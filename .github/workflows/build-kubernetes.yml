@@ -49,7 +49,7 @@ jobs:
   # ════════════════════════════════════════════════════
   prepare:
     name: Prepare Build Environment
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     outputs:
       current_date: ${{ steps.compute.outputs.current_date }}
       version_id: ${{ steps.compute.outputs.version_id }}
@@ -127,7 +127,7 @@ jobs:
       matrix:
         include:
           - variant: amd64
-            runs_on: ubuntu-26.04
+            runs_on: ubuntu-24.04
             platform: linux/amd64
             targetarch: amd64
             arches: amd64
@@ -135,7 +135,7 @@ jobs:
             title: kubernetes
             description: "Kubernetes node bootc image (kubelet, kubeadm, cri-o) — amd64 base"
           - variant: asahi
-            runs_on: ubuntu-26.04-arm
+            runs_on: ubuntu-24.04-arm
             platform: linux/arm64
             targetarch: arm64
             arches: "arm64 -"
@@ -247,7 +247,7 @@ jobs:
   build-extension:
     name: Build kubernetes (${{ matrix.variant }})
     needs: [prepare, build-base]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     strategy:
       fail-fast: false

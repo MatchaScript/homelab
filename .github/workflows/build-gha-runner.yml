@@ -90,9 +90,9 @@ jobs:
         arch: [amd64, arm64]
         include:
           - arch: amd64
-            runner: ubuntu-26.04
+            runner: ubuntu-24.04
           - arch: arm64
-            runner: ubuntu-26.04-arm
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -183,7 +183,7 @@ jobs:
   # ── Slim multi-arch manifest ──────────────────────────
   manifest-slim:
     name: Create Slim Manifest
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     needs: [prepare, build-slim]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
@@ -248,9 +248,9 @@ jobs:
         arch: [amd64, arm64]
         include:
           - arch: amd64
-            runner: ubuntu-26.04
+            runner: ubuntu-24.04
           - arch: arm64
-            runner: ubuntu-26.04-arm
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -348,7 +348,7 @@ jobs:
   # ── Default multi-arch manifest ───────────────────────
   manifest-default:
     name: Create Default Manifest
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     needs: [prepare, build-default]
     if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
     steps:
