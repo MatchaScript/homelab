@@ -8,7 +8,7 @@
           "subdir": "monitoring/ceph-mixin"
         }
       },
-      "version": "65396aa0f14da54cb05c32d9a6ce539249c84645",
+      "version": "43b369d293c4db5d52d8762d2a43484ef3c860e0",
       "sum": "ufVgGNSYLzuaS9DmMYVbQ9ZkYypir7YzWCiYUrGDSwc="
     },
     {
@@ -68,8 +68,8 @@
           "subdir": ""
         }
       },
-      "version": "2a64f253257058d6617f52ad46322f64a4bd76c6",
-      "sum": "UV0cPzok0ihZW5A2w7yw/tMdliLebcWI6jzR/eDQWNg="
+      "version": "13483412910e1f7936f59ceb0120a2fd9578e383",
+      "sum": "SzSzmiJSYNI716u5f4hDHHINHqNuiZStwwlI12xETmY="
     },
     {
       "source": {
@@ -78,7 +78,7 @@
           "subdir": "docs/node-mixin"
         }
       },
-      "version": "254a86c0334cf194156a90d8535549f73e4cb122",
+      "version": "9a077374d780c3cbda129a5760fb785853c79542",
       "sum": "PGx1okd1Ny4U+Ma3AV0haZWvXnX8eJBN4+BsQInWUo4="
     }
   ],
