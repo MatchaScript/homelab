@@ -125,7 +125,7 @@ dnsdist:
   image:
     repository: docker.io/powerdns/dnsdist-21
     pullPolicy: IfNotPresent
-    tag: "latest@sha256:28100b260120b2f4fdcef6e973f5553966977c2ec4576ed2d849b1dc9d3278ea"
+    tag: "latest@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67"
   service:
     type: ClusterIP
     # Note: If dnsdist is exposed with a LoadBalancer, this usually becomes LoadBalancer.
