@@ -14,7 +14,7 @@ on:
       kata_ref:
         description: "Commit or branch to build"
         type: string
-        default: 90559846d48d799ae1d5c3da8dfb00822528a1b7
+        default: 9b6921e115b7ba4fee987a91beee14e57910165e
       push:
         description: "Push the artifact image to ghcr.io"
         type: boolean
@@ -129,7 +129,7 @@ jobs:
           if-no-files-found: error
 
   build-asset-shim-v2:
-    name: build-asset-shim-v2 (shim-v2-go, ${{ matrix.arch }})
+    name: build-asset-shim-v2 (shim-v2-${{ matrix.impl }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -138,6 +138,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        arch: [amd64, arm64]
+        impl: [go, rust]
         include:
           - arch: amd64
             runner: ubuntu-24.04
@@ -150,13 +152,14 @@ jobs:
           ref: ${{ inputs.kata_ref }}
           persist-credentials: false
 
-      - name: Build shim-v2-go
+      - name: Build shim-v2-${{ matrix.impl }}
         run: |
-          make shim-v2-go-tarball
+          make "shim-v2-${IMPL}-tarball"
           build_dir=$(readlink -f build)
           mkdir -p kata-build
-          cp "${build_dir}"/kata-static-shim-v2-go.tar.zst kata-build/
+          cp "${build_dir}"/kata-static-shim-v2-"${IMPL}".tar.zst kata-build/
         env:
+          IMPL: ${{ matrix.impl }}
           ARTEFACT_REGISTRY: ghcr.io
           ARTEFACT_REGISTRY_USERNAME: ${{ github.actor }}
           ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
@@ -164,8 +167,8 @@ jobs:
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: kata-asset-shim-v2-go-${{ matrix.arch }}
-          path: kata-build/kata-static-shim-v2-go.tar.zst
+          name: kata-asset-shim-v2-${{ matrix.impl }}-${{ matrix.arch }}
+          path: kata-build/kata-static-shim-v2-${{ matrix.impl }}.tar.zst
           retention-days: 7
           if-no-files-found: error
 
@@ -201,6 +204,8 @@ jobs:
               tar -I zstd -xf "${tarball}" -C "kata-root/${arch}"
             done
             test -x "kata-root/${arch}/opt/kata/bin/containerd-shim-kata-v2"
+            test -x "kata-root/${arch}/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
+            test -f "kata-root/${arch}/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml"
           done
 
       - name: Build artifact image

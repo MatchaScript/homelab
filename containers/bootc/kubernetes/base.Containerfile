@@ -2,7 +2,7 @@
 ARG SYSBASE
 ARG KUBEADM_VERSION="v1.35"
 # Built by .github/workflows/build-kata.yml from the netkit L3 fork
-ARG KATA_REF="90559846d48d799ae1d5c3da8dfb00822528a1b7"
+ARG KATA_REF="9b6921e115b7ba4fee987a91beee14e57910165e"
 
 # Stage 1: Download kubeadm binary
 FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:8ecc25bf8097ef4f1500feec32e60aa87fca063f53f8b3ce814fc116a32b0478 AS kubeadm-downloader
@@ -69,6 +69,8 @@ COPY --from=kubeadm-downloader /opt/bin/kubeadm /usr/bin/kubeadm
 # cri-o reaches the shim, hypervisor and guest assets under /opt/kata by
 # absolute path; only the CLI needs to be on PATH
 COPY --from=kata /opt/kata /opt/kata
+RUN sed -i 's/^emptydir_mode = "shared-fs"$/emptydir_mode = "block-plain"/' /opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml && \
+    grep -q '^emptydir_mode = "block-plain"$' /opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml
 RUN ln -s /opt/kata/bin/kata-runtime /usr/bin/kata-runtime && \
     command -v kata-runtime
 RUN systemctl enable tuned && \
