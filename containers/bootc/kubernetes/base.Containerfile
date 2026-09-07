@@ -69,8 +69,7 @@ COPY --from=kubeadm-downloader /opt/bin/kubeadm /usr/bin/kubeadm
 # cri-o reaches the shim, hypervisor and guest assets under /opt/kata by
 # absolute path; only the CLI needs to be on PATH
 COPY --from=kata /opt/kata /opt/kata
-RUN sed -i 's/^emptydir_mode = "shared-fs"$/emptydir_mode = "block-plain"/' /opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml && \
-    grep -q '^emptydir_mode = "block-plain"$' /opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml
+COPY overlay.d/20-kata/ /
 RUN ln -s /opt/kata/bin/kata-runtime /usr/bin/kata-runtime && \
     command -v kata-runtime
 RUN systemctl enable tuned && \

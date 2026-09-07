@@ -1,0 +1,5 @@
+# emptyDir volumes reach the guest as a block device instead of the shared
+# filesystem. Drop-in fragments are merged over the base configuration file
+# next to config.d/, so the shipped kata configuration stays untouched.
+[runtime]
+emptydir_mode = "block-plain"
