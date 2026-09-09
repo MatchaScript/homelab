@@ -22,6 +22,7 @@ COPY overlay.d/01-timesyncd/ /
 COPY overlay.d/01-container-mirror/ /
 COPY overlay.d/10-zswap/ /
 COPY overlay.d/10-vm-swapfile/ /
+COPY overlay.d/10-vscode-remote/ /
 
 # ── Platform toolchain (refined from homelab-classic/envbox-base) ──
 RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
@@ -36,6 +37,8 @@ RUN dnf install -y --setopt=install_weak_deps=False --nodocs \
 
 
 COPY --from=tool-fetch /tmp/bin/ /usr/bin/
+
+RUN semodule -i /usr/share/selinux/packages/vscode-remote-forward.cil
 
 RUN systemctl enable tuned && \
     systemctl enable systemd-networkd && \
