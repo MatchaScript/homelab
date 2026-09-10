@@ -64,6 +64,7 @@
         ".github/workflows/build-fedora.yml",
         ".github/workflows/build-kubernetes.yml",
         ".github/workflows/build-development.yml",
+        ".github/workflows/build-che-development.yml",
         ".github/workflows/build-gha-runner.yml",
         "containers/bootc/kubernetes/base.Containerfile",
         "charts/cnpg-cluster/**",
