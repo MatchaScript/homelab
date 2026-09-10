@@ -30,7 +30,7 @@ env:
   HYPERV_IMAGE: fedora-development-hyperv
   DISK_IMAGE: fedora-development-disk
   # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
-  DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest"
+  DEV_BASE: "ghcr.io/matchascript/fedora-bootc:latest@sha256:a7baf945ada9f9c56bb3bb812c887a592aeb36f15e9ddd9cad4c4fd8bd526620"
   CONTEXT_DIR: ./containers
 
 jobs:
@@ -87,21 +87,11 @@ jobs:
 
   # ════════════════════════════════════════════════════
   #  Build bootc image, convert to qcow2, wrap as container-disk
-  #  — amd64 / arm64
   # ════════════════════════════════════════════════════
   build:
-    name: Build development image (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    name: Build development image (amd64)
+    runs-on: ubuntu-26.04
     needs: prepare
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [amd64, arm64]
-        include:
-          - arch: amd64
-            runner: ubuntu-26.04
-          - arch: arm64
-            runner: ubuntu-26.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -129,13 +119,13 @@ jobs:
           done <<< "$OCI_LABELS"
 
           sudo podman build \
-            --platform linux/${{ matrix.arch }} \
+            --platform linux/amd64 \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
             --build-arg DEV_BASE="${DEV_BASE}" \
             "${LABEL_ARGS[@]}" \
-            --tag temp-dev-${{ matrix.arch }} \
+            --tag temp-dev \
             -f "${CONTEXT_DIR}/bootc/development/base.Containerfile" \
             "${CONTEXT_DIR}"
 
@@ -147,9 +137,9 @@ jobs:
             -v /var/lib/containers:/var/lib/containers:z \
             quay.io/centos-bootc/centos-bootc:stream10 \
             /usr/libexec/bootc-base-imagectl rechunk \
-            localhost/temp-dev-${{ matrix.arch }}:latest localhost/rechunked-temp-dev-${{ matrix.arch }}:latest
-          sudo podman tag localhost/rechunked-temp-dev-${{ matrix.arch }}:latest localhost/temp-dev-${{ matrix.arch }}:latest
-          sudo podman rmi localhost/rechunked-temp-dev-${{ matrix.arch }}:latest
+            localhost/temp-dev:latest localhost/rechunked-temp-dev:latest
+          sudo podman tag localhost/rechunked-temp-dev:latest localhost/temp-dev:latest
+          sudo podman rmi localhost/rechunked-temp-dev:latest
 
       - name: Generate tags (bootc)
         id: bootc-tags
@@ -159,7 +149,7 @@ jobs:
           branch: ${{ needs.prepare.outputs.branch_name }}
           date: ${{ needs.prepare.outputs.current_date }}
           version: ${{ needs.prepare.outputs.version_id }}
-          arches: ${{ matrix.arch }}
+          arches: "amd64 -"
 
       - name: Login to registry
         if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
@@ -173,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           for tag in $(echo "$TAGS" | tr ',' ' '); do
-            sudo podman tag temp-dev-${{ matrix.arch }} "${tag}"
+            sudo podman tag temp-dev "${tag}"
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
@@ -196,7 +186,7 @@ jobs:
           title: ${{ env.VM_IMAGE }}
           description: "Development environment bootc image (VM variant)"
           version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
-          base_name: localhost/temp-dev-${{ matrix.arch }}:latest
+          base_name: localhost/temp-dev:latest
 
       - name: Build VM variant
         env:
@@ -210,13 +200,13 @@ jobs:
           done <<< "$OCI_LABELS"
 
           sudo podman build \
-            --platform linux/${{ matrix.arch }} \
+            --platform linux/amd64 \
             --security-opt=label=disable \
             --cap-add=all \
             --device /dev/fuse \
-            --build-arg VM_BASE=localhost/temp-dev-${{ matrix.arch }}:latest \
+            --build-arg VM_BASE=localhost/temp-dev:latest \
             "${LABEL_ARGS[@]}" \
-            --tag temp-dev-vm-${{ matrix.arch }} \
+            --tag temp-dev-vm \
             -f "${CONTEXT_DIR}/bootc/development/vm.Containerfile" \
             "${CONTEXT_DIR}"
 
@@ -228,7 +218,7 @@ jobs:
           branch: ${{ needs.prepare.outputs.branch_name }}
           date: ${{ needs.prepare.outputs.current_date }}
           version: ${{ needs.prepare.outputs.version_id }}
-          arches: ${{ matrix.arch }}
+          arches: "amd64 -"
 
       - name: Tag and push VM variant
         if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
@@ -237,7 +227,7 @@ jobs:
         run: |
           set -euo pipefail
           for tag in $(echo "$TAGS" | tr ',' ' '); do
-            sudo podman tag temp-dev-vm-${{ matrix.arch }} "${tag}"
+            sudo podman tag temp-dev-vm "${tag}"
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
@@ -264,7 +254,7 @@ jobs:
             -v "$(pwd)/output":/output \
             ghcr.io/osbuild/image-builder-cli:latest \
             build qcow2 \
-            --bootc-ref localhost/temp-dev-vm-${{ matrix.arch }}:latest \
+            --bootc-ref localhost/temp-dev-vm:latest \
             --bootc-default-fs btrfs \
             --output-dir /output
           qcow2="$(find output -name '*.qcow2' | head -1)"
@@ -275,8 +265,8 @@ jobs:
         run: |
           set -euo pipefail
           sudo podman build \
-            --platform linux/${{ matrix.arch }} \
-            --tag temp-dev-disk-${{ matrix.arch }} \
+            --platform linux/amd64 \
+            --tag temp-dev-disk \
             -f "${CONTEXT_DIR}/bootc/development/disk.Containerfile" \
             output/
 
@@ -288,7 +278,7 @@ jobs:
           branch: ${{ needs.prepare.outputs.branch_name }}
           date: ${{ needs.prepare.outputs.current_date }}
           version: ${{ needs.prepare.outputs.version_id }}
-          arches: ${{ matrix.arch }}
+          arches: "amd64 -"
 
       - name: Tag and push container-disk image
         if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
@@ -297,7 +287,7 @@ jobs:
         run: |
           set -euo pipefail
           for tag in $(echo "$TAGS" | tr ',' ' '); do
-            sudo podman tag temp-dev-disk-${{ matrix.arch }} "${tag}"
+            sudo podman tag temp-dev-disk "${tag}"
             sudo podman push "${tag}"
             echo "Pushed: ${tag}"
           done
@@ -311,107 +301,40 @@ jobs:
           registry_username: ${{ github.actor }}
           registry_password: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── bootc / VM / container-disk multi-arch manifests ──
-  manifest:
-    name: Create development manifests
-    runs-on: ubuntu-26.04
-    needs: [prepare, build]
-    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # ── Build Hyper-V variant (hyperv-daemons) ──
 
-      - name: Setup Podman
-        uses: ./.github/actions/setup-podman
-
-      - name: Login to registry
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin "${{ needs.prepare.outputs.registry }}"
-
-      - name: Generate tags (bootc)
-        id: bootc-tags
-        uses: ./.github/actions/image-tags
+      - name: Generate OCI labels (Hyper-V variant)
+        id: hyperv-labels
+        uses: ./.github/actions/oci-labels
         with:
-          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
-          branch: ${{ needs.prepare.outputs.branch_name }}
-          date: ${{ needs.prepare.outputs.current_date }}
-          version: ${{ needs.prepare.outputs.version_id }}
-          arches: "-"
+          title: ${{ env.HYPERV_IMAGE }}
+          description: "Development environment bootc image (Hyper-V variant)"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: localhost/temp-dev:latest
 
-      - name: Generate tags (VM variant)
-        id: vm-tags
-        uses: ./.github/actions/image-tags
-        with:
-          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.VM_IMAGE }}
-          branch: ${{ needs.prepare.outputs.branch_name }}
-          date: ${{ needs.prepare.outputs.current_date }}
-          version: ${{ needs.prepare.outputs.version_id }}
-          arches: "-"
-
-      - name: Generate tags (container-disk)
-        id: disk-tags
-        uses: ./.github/actions/image-tags
-        with:
-          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DISK_IMAGE }}
-          branch: ${{ needs.prepare.outputs.branch_name }}
-          date: ${{ needs.prepare.outputs.current_date }}
-          version: ${{ needs.prepare.outputs.version_id }}
-          arches: "-"
-
-      # The three images share one primary key: image-tags derives it from the
-      # same branch / date / version inputs.
-      - name: Create and push multi-arch manifests
+      - name: Build Hyper-V variant
         env:
-          IMAGE_PREFIX: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}
-          PRIMARY_KEY: ${{ steps.bootc-tags.outputs.primary_key }}
-          BOOTC_TAGS: ${{ steps.bootc-tags.outputs.tags }}
-          VM_TAGS: ${{ steps.vm-tags.outputs.tags }}
-          DISK_TAGS: ${{ steps.disk-tags.outputs.tags }}
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          OCI_LABELS: ${{ steps.hyperv-labels.outputs.labels }}
         run: |
           set -euo pipefail
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
 
-          stitch() {
-            local image="$1" tags="$2"
-            echo "Creating multi-arch manifest for ${image}:${PRIMARY_KEY}"
-            sudo podman manifest create "${image}-manifest"
-            for arch in amd64 arm64; do
-              sudo podman manifest add "${image}-manifest" "docker://${IMAGE_PREFIX}/${image}:${PRIMARY_KEY}-${arch}"
-            done
-            for tag in $(echo "$tags" | tr ',' ' '); do
-              echo "Pushing manifest as: ${tag}"
-              sudo podman manifest push "${image}-manifest" "docker://${tag}"
-            done
-            sudo podman manifest rm "${image}-manifest"
-          }
-
-          stitch "$IMAGE" "$BOOTC_TAGS"
-          stitch "$VM_IMAGE" "$VM_TAGS"
-          stitch "$DISK_IMAGE" "$DISK_TAGS"
-
-      - name: Sign multi-arch manifests (cosign keyless)
-        uses: ./.github/actions/cosign-sign
-        with:
-          references: "${{ steps.bootc-tags.outputs.tags }},${{ steps.vm-tags.outputs.tags }},${{ steps.disk-tags.outputs.tags }}"
-          registry: ${{ needs.prepare.outputs.registry }}
-          registry_username: ${{ github.actor }}
-          registry_password: ${{ secrets.GITHUB_TOKEN }}
-
-  # ════════════════════════════════════════════════════
-  #  Build Hyper-V variant — amd64 only
-  # ════════════════════════════════════════════════════
-  build-hyperv:
-    name: Build development Hyper-V variant (amd64)
-    runs-on: ubuntu-26.04
-    needs: [prepare, manifest]
-    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - name: Setup Podman
-        uses: ./.github/actions/setup-podman
-
-      - name: Login to registry
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin "${{ needs.prepare.outputs.registry }}"
+          sudo podman build \
+            --platform linux/amd64 \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg BOOTC_BASE=localhost/temp-dev:latest \
+            --build-arg VERSION_ID="${VERSION_ID}" \
+            "${LABEL_ARGS[@]}" \
+            --tag temp-dev-hyperv \
+            -f "${CONTEXT_DIR}/bootc/extensions/hyper-v.Containerfile" \
+            "${CONTEXT_DIR}"
 
       - name: Generate tags (Hyper-V variant)
         id: hyperv-tags
@@ -423,51 +346,8 @@ jobs:
           version: ${{ needs.prepare.outputs.version_id }}
           arches: "amd64 -"
 
-      - name: Generate OCI labels (Hyper-V variant)
-        id: hyperv-labels
-        uses: ./.github/actions/oci-labels
-        with:
-          title: ${{ env.HYPERV_IMAGE }}
-          description: "Development environment bootc image (Hyper-V variant)"
-          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
-          base_name: "${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}"
-
-      - name: Build Hyper-V variant
-        env:
-          REGISTRY: ${{ needs.prepare.outputs.registry }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE: ${{ env.IMAGE }}
-          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
-          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
-          OCI_LABELS: ${{ steps.hyperv-labels.outputs.labels }}
-        run: |
-          set -euo pipefail
-          LABEL_ARGS=()
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            LABEL_ARGS+=(--label "$line")
-          done <<< "$OCI_LABELS"
-
-          if [ "$BRANCH_NAME" = "main" ]; then
-            BOOTC_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE}:latest-amd64"
-          else
-            BOOTC_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE}:${BRANCH_NAME}-amd64"
-          fi
-          echo "Using BOOTC_BASE=${BOOTC_BASE}"
-
-          sudo podman build \
-            --platform linux/amd64 \
-            --security-opt=label=disable \
-            --cap-add=all \
-            --device /dev/fuse \
-            --build-arg BOOTC_BASE="${BOOTC_BASE}" \
-            --build-arg VERSION_ID="${VERSION_ID}" \
-            "${LABEL_ARGS[@]}" \
-            --tag temp-dev-hyperv \
-            -f "${CONTEXT_DIR}/bootc/extensions/hyper-v.Containerfile" \
-            "${CONTEXT_DIR}"
-
       - name: Tag and push Hyper-V variant
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
         env:
           TAGS: ${{ steps.hyperv-tags.outputs.tags }}
         run: |
@@ -479,6 +359,7 @@ jobs:
           done
 
       - name: Sign Hyper-V variant (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
         uses: ./.github/actions/cosign-sign
         with:
           references: ${{ steps.hyperv-tags.outputs.tags }}

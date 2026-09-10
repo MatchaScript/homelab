@@ -64,7 +64,6 @@
         ".github/workflows/build-fedora.yml",
         ".github/workflows/build-kubernetes.yml",
         ".github/workflows/build-development.yml",
-        ".github/workflows/build-che-development.yml",
         ".github/workflows/build-gha-runner.yml",
         "containers/bootc/kubernetes/base.Containerfile",
         "charts/cnpg-cluster/**",
@@ -109,14 +108,6 @@
       "matchPackageNames": [
         "actions/runner",
         "actions/runner-container-hooks"
-      ],
-      "extractVersion": "^v(?<version>.+)$"
-    },
-    {
-      "description": "Strip leading 'v' from MatchaScript/totan GitHub release tags",
-      "matchDatasources": ["github-releases"],
-      "matchPackageNames": [
-        "MatchaScript/totan"
       ],
       "extractVersion": "^v(?<version>.+)$"
     }
