@@ -41,17 +41,20 @@ COPY overlay.d/01-container-mirror/ /
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     zsh zsh-syntax-highlighting zsh-autosuggestions locales ca-certificates curl \
     bubblewrap tar nano vim git sudo podman buildah skopeo uidmap passt \
-    jq ripgrep fd-find fzf btop openssh-client fastfetch kind kustomize \
+    jq ripgrep fd-find fzf btop openssh-client openssh-server fastfetch kind kustomize \
     build-essential erofs-utils cephadm \
-    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/lib/apt/lists/* /etc/ssh/ssh_host_* \
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
     && locale-gen en_US.UTF-8
 
 COPY --from=tool-fetch /tmp/bin/ /usr/local/bin/
+COPY overlay.d/20-che-sshd/ /
 
 # Che runs workspace containers as 1234:0 on Kubernetes (DevWorkspace Operator
-# default). /home/user is the persistent-home PVC mount, so nothing is put there.
-RUN useradd -u 1234 -g 0 -d /home/user -s /usr/bin/zsh user \
+# default), with fsGroup 1234 as a supplementary group. /home/user is the
+# persistent-home PVC mount, so nothing is put there.
+RUN groupadd -g 1234 user \
+    && useradd -u 1234 -g 0 -d /home/user -s /usr/bin/zsh user \
     && install -d -o 1234 -g 0 /home/user \
     && echo 'user ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/user \
     && chmod 440 /etc/sudoers.d/user
@@ -61,8 +64,9 @@ ENV HOME=/home/user \
     LANG=C.UTF-8
 USER 1234
 
-# che-code is started by a postStart hook, so the container's own process must stay up.
-CMD ["sleep", "infinity"]
+# che-code is started by a postStart hook, so the container's own process must
+# stay up; sshd in the foreground serves as that process.
+CMD ["workspace-sshd"]
 
 LABEL org.opencontainers.image.title="Dev Image (Che)" \
     org.opencontainers.image.description="Development Environment for Eclipse Che workspaces" \

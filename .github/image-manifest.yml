@@ -82,6 +82,7 @@
     - .github/actions/setup-podman/
     - containers/che/development.Containerfile
     - containers/overlay.d/01-container-mirror/
+    - containers/overlay.d/20-che-sshd/
     - .github/workflows/build-che-development.yml
   pin_source: .github/workflows/build-che-development.yml
   pin_env_key: DEV_BASE

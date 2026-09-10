@@ -98,6 +98,10 @@ jobs:
               command -v "$t" >/dev/null || { echo "missing: $t"; exit 1; }
             done
           '
+          sudo podman run -d --name sshd-test temp-dev
+          sleep 3
+          sudo podman exec sshd-test ssh-keyscan -p 2022 127.0.0.1 | grep -q ssh-ed25519
+          sudo podman rm -f sshd-test
 
       - name: Generate tags
         id: tags
