@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zone-create
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: zone-create
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          env:
+            - name: PGURI
+              valueFrom:
+                secretKeyRef:
+                  name: pdns-db-cnpg-cluster-app
+                  key: uri
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              psql "$PGURI" <<'SQL'
+              INSERT INTO domains (name, type) VALUES ('example.test', 'NATIVE');
+              INSERT INTO records (domain_id, name, type, content, ttl, auth)
+                SELECT id, 'example.test', 'SOA',
+                       'ns1.example.test admin.example.test 1 10800 3600 604800 3600',
+                       3600, true
+                FROM domains WHERE name = 'example.test';
+              INSERT INTO records (domain_id, name, type, content, ttl, auth)
+                SELECT id, 'example.test', 'NS', 'ns1.example.test', 3600, true
+                FROM domains WHERE name = 'example.test';
+              INSERT INTO records (domain_id, name, type, content, ttl, auth)
+                SELECT id, 'test.example.test', 'A', '10.1.2.3', 3600, true
+                FROM domains WHERE name = 'example.test';
+              SQL
+              psql "$PGURI" -c "SELECT name, type FROM records WHERE domain_id = (SELECT id FROM domains WHERE name = 'example.test') ORDER BY type;"

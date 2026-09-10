@@ -1,0 +1,29 @@
+mode: replica
+
+# Designated-primary replica bootstrapped from an existing ObjectStore.
+# `replica.self`/`replica.primary` are intentionally omitted: those are for
+# distributed-PostgreSQL topologies where multiple clusters negotiate roles via
+# named externalClusters, which CNPG validates against `spec.externalClusters[*].name`.
+replica:
+  bootstrap:
+    source: object_store
+  origin:
+    objectStore:
+      name: primary-cnpg-cluster-backup
+      clusterName: primary-cnpg-cluster
+
+cluster:
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+backups:
+  enabled: false
+
+monitoring:
+  enabled: false

@@ -1,0 +1,169 @@
+# Default values for powerdns.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: docker.io/powerdns/pdns-auth-50
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest@sha256:4d6cc4fc42a28f2df7fb55f6f36d8323f96e0da66135ccdad057ca7349b223b4"
+
+# Image used by the credentials init container. Needs sh + redirection only.
+initContainer:
+  image:
+    repository: ghcr.io/matchascript/fedora
+    tag: "micro@sha256:ccff476bcbc8890e5ef14b8f6e18135370c8151a91102c3297500ec565266c86"
+    pullPolicy: IfNotPresent
+
+# Image used by the init container that waits for the database TCP port to open.
+# Requires `sh` and `nc`. busybox is a good default; override for air-gapped
+# environments.
+waitForDb:
+  image:
+    repository: docker.io/library/busybox
+    tag: "1.38@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616"
+    pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Kubernetes cluster domain
+clusterDomain: cluster.local
+
+service:
+  type: ClusterIP
+  # Set clusterIP to None to create a headless service
+  # clusterIP: None
+  port: 53
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# External PostgreSQL connection.
+# The chart no longer provisions a database. Provide an existing PostgreSQL
+# endpoint and a Secret with credentials. The schema ConfigMap below can be
+# referenced by an external bootstrapper (e.g. CNPG's
+# bootstrap.initdb.postInitApplicationSQLRefs) to seed the schema.
+postgresql:
+  # Required. e.g. "my-db-rw.cnpg.svc"
+  host: ""
+  port: 5432
+  # Database name PowerDNS will connect to.
+  database: powerdns
+  # Required. Secret containing 'username' and 'password' keys.
+  # CNPG-managed clusters auto-generate <cluster>-app secrets that fit this shape.
+  credentialsSecret: ""
+
+  # Schema ConfigMap (PowerDNS PostgreSQL schema, ready for external bootstrappers).
+  schemaConfigMap:
+    create: true
+    # SET ROLE statement prepended to schema.sql. Empty string disables it.
+    role: powerdns
+
+# PowerDNS ConfigMap settings (pdns.conf)
+powerdns:
+  # Secret name containing 'api-key' and 'webserver-password' keys.
+  # If set, these are injected via init-container.
+  appCredentialsSecret: ""
+
+  # Additional configuration appended to pdns.conf
+  # Note: local-port=5353 is set in the base configmap by default
+  config: |
+    # Any custom pdns.conf parameters can go here
+    log-dns-details=yes
+    log-dns-queries=yes
+    loglevel=4
+
+# PowerDNS Recursor Settings
+recursor:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: docker.io/powerdns/pdns-recursor-51
+    pullPolicy: IfNotPresent
+    tag: "latest@sha256:8b726b17f97c4bf3cf1c7b357951e2552cd8a813e1de39aa5e10db5a9753c61b"
+  service:
+    type: ClusterIP
+    port: 53
+    annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Recursor config in YAML format (required by pdns-recursor 5.x)
+  config: |
+    incoming:
+      listen:
+        - 0.0.0.0:5353
+    logging:
+      common_errors: true
+
+# DNSDist Settings
+dnsdist:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: docker.io/powerdns/dnsdist-21
+    pullPolicy: IfNotPresent
+    tag: "latest@sha256:efabf173811e27438bebee5f1f40e047f263ea39093a8f7d6097df494cf1ed67"
+  service:
+    type: ClusterIP
+    # Note: If dnsdist is exposed with a LoadBalancer, this usually becomes LoadBalancer.
+    port: 53
+    annotations: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # config: Optional custom dnsdist.conf content
+  # If not set, the template auto-generates config with correct service names:
+  #   setLocal("0.0.0.0:5353")
+  #   newServer({address="<fullname>:5353", pool="auth"})
+  #   newServer({address="<fullname>-recursor:5353", pool="recursor"})  # if recursor enabled
+
+# Zone bootstrap
+# Ensures authoritative zones exist via the PowerDNS HTTP API after install and
+# upgrade (runs as a Helm post-install/post-upgrade hook). API clients such as
+# external-dns only manage records within existing zones; this seeds the zones
+# themselves, and PowerDNS generates the SOA automatically. Requires
+# powerdns.appCredentialsSecret (the Secret holding 'api-key'). An empty zones
+# list disables the hook entirely.
+zoneBootstrap:
+  image:
+    repository: docker.io/curlimages/curl
+    tag: "8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"
+    pullPolicy: IfNotPresent
+  # Seconds to wait for the PowerDNS API to become reachable before giving up.
+  apiTimeoutSeconds: 300
+  # Zones to create if absent. Trailing dots are added automatically.
+  zones: []
+  #  - name: example.org
+  #    kind: Native            # optional, defaults to Native
+  #    nameservers:            # optional
+  #      - ns1.example.org

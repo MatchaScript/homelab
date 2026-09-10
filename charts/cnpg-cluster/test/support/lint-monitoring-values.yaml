@@ -1,0 +1,7 @@
+# Lint-only values for `make lint-prom`. Enables monitoring so the
+# PrometheusRule renders, then runs `promtool check rules` against the result.
+cluster:
+  monitoring:
+    enabled: true
+    prometheusRule:
+      enabled: true

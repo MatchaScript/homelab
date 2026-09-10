@@ -1,0 +1,5 @@
+; VS Code Remote has the client open a direct-tcpip channel to the ephemeral
+; port that `code command-shell` listens on, so sshd-session performs the
+; connect.  The shipped policy grants this only under nis_enabled, which would
+; let every nsswitch_domain reach every port.
+(allow sshd_session_t ephemeral_port_t (tcp_socket (name_connect)))

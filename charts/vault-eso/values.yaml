@@ -1,0 +1,35 @@
+## Vault-backed SecretStore and ServiceAccount for ESO
+secretStore:
+  enabled: false
+  name: vault
+  vault:
+    server: ""
+    namespace: ""
+    path: secret
+    version: v2
+    auth:
+      mountPath: kubernetes
+      role: ""
+
+## ExternalSecret definitions
+## Each entry creates an ExternalSecret resource referencing the SecretStore above
+## Example:
+##   externalSecrets:
+##     - name: my-secret
+##       refreshInterval: 1h       # optional, default 1h
+##       creationPolicy: Owner     # optional, default Owner
+##       template:                 # optional, for target secret templating
+##         engineVersion: v2       # optional
+##         type: Opaque            # optional (e.g., kubernetes.io/basic-auth)
+##         mergePolicy: Replace    # optional (e.g., Merge, Replace)
+##         metadata:               # optional (labels, annotations)
+##           labels: {}
+##           annotations: {}
+##         data:                   # optional, templated secret data
+##           key: "{{ .secretKey }}"
+##       data:
+##         - secretKey: password
+##           remoteRef:
+##             key: services/myapp/credentials
+##             property: password
+externalSecrets: []

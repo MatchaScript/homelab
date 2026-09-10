@@ -1,0 +1,16 @@
+apiVersion: ceph.rook.io/v1
+kind: CephObjectZone
+metadata:
+  name: {{ required "zone.name is required" .Values.zone.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  zoneGroup: {{ required "zoneGroup.name is required" .Values.zoneGroup.name }}
+  metadataPool:
+    {{- toYaml .Values.zone.metadataPool | nindent 4 }}
+  dataPool:
+    {{- toYaml .Values.zone.dataPool | nindent 4 }}
+  preservePoolsOnDelete: {{ .Values.zone.preservePoolsOnDelete }}
+  {{- with .Values.zone.customEndpoints }}
+  customEndpoints:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}

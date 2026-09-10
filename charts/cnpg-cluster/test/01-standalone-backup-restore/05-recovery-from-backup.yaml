@@ -1,0 +1,29 @@
+mode: recovery
+
+recovery:
+  method: backup
+  backupName: standalone-backup-1
+  # Required so the chart emits the barman-cloud plugin block on the recovery
+  # cluster (CNPG needs the plugin declared to read WAL during restore from
+  # the source's ObjectStore).
+  objectStoreName: standalone-cnpg-cluster-backup
+  # The plugin uses serverName to locate the backup catalog under
+  # destinationPath/<serverName>/. Without this it would default to the
+  # RECOVERY cluster's name and miss the catalog written by the source.
+  clusterName: standalone-cnpg-cluster
+
+cluster:
+  instances: 1
+  storage:
+    size: 1Gi
+    storageClass: standard
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+backups:
+  enabled: false
+
+monitoring:
+  enabled: false

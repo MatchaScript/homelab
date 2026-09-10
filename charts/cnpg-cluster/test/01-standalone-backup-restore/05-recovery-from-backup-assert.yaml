@@ -1,0 +1,7 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: recovery-from-backup-cnpg-cluster
+status:
+  readyInstances: 1
+  phase: Cluster in healthy state

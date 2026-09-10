@@ -1,0 +1,23 @@
+# Master cluster with an erasure-coded data pool (large-scale cold object
+# storage). metadataPool stays replicated because metadata pools cannot
+# efficiently be EC'd.
+realm:
+  name: realm-cold
+
+zoneGroup:
+  name: zg-cold
+
+zone:
+  name: zone-cold-1
+  metadataPool:
+    failureDomain: host
+    replicated:
+      size: 3
+  dataPool:
+    failureDomain: host
+    erasureCoded:
+      dataChunks: 4
+      codingChunks: 2
+    parameters:
+      bulk: "true"
+  preservePoolsOnDelete: true

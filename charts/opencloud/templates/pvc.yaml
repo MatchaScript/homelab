@@ -1,0 +1,37 @@
+{{- if and .Values.persistence.config.enabled (not .Values.persistence.config.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "opencloud.fullname" . }}-config
+  namespace: {{ include "opencloud.namespace" . }}
+  labels:
+    {{- include "opencloud.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.config.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.config.size }}
+  {{- with .Values.persistence.config.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.persistence.data.enabled (not .Values.persistence.data.existingClaim) }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "opencloud.fullname" . }}-data
+  namespace: {{ include "opencloud.namespace" . }}
+  labels:
+    {{- include "opencloud.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.data.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+  {{- with .Values.persistence.data.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}

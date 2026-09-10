@@ -1,0 +1,33 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: data-write
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: data-write
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          env:
+            - name: PGURI
+              valueFrom:
+                secretKeyRef:
+                  name: standalone-cnpg-cluster-app
+                  key: uri
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              psql "$PGURI" <<'SQL'
+              CREATE TABLE IF NOT EXISTS test_rows (
+                id SERIAL PRIMARY KEY,
+                phase TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+              );
+              INSERT INTO test_rows (phase) VALUES ('pre-backup');
+              SQL
+              psql "$PGURI" -c "SELECT phase, count(*) FROM test_rows GROUP BY phase;"

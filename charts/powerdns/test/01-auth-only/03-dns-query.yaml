@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dns-query
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: dns-query
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: dig
+          image: alpine:3.20
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              apk add --no-cache bind-tools >/dev/null
+              # Auth server listens on the chart's Service port (default 53 via service.port)
+              # but the container exposes 5353. The Service port forwards to it.
+              for i in 1 2 3 4 5 6 7 8 9 10; do
+                if dig +short +tcp @pdns-powerdns -p 53 test.example.test A | grep -qx '10.1.2.3'; then
+                  echo "OK: A record resolved correctly"
+                  exit 0
+                fi
+                echo "attempt $i: not yet, retrying..."
+                sleep 3
+              done
+              echo "FAIL: A record did not resolve as expected"
+              dig @pdns-powerdns -p 53 test.example.test A || true
+              exit 1

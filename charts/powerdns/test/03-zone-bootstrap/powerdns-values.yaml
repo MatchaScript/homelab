@@ -1,0 +1,32 @@
+replicaCount: 1
+
+postgresql:
+  host: pdns-db-cnpg-cluster-rw
+  port: 5432
+  database: powerdns
+  credentialsSecret: pdns-db-cnpg-cluster-app
+  schemaConfigMap:
+    create: true
+    role: powerdns
+
+powerdns:
+  appCredentialsSecret: pdns-app
+  config: |
+    api=yes
+    webserver=yes
+    webserver-address=0.0.0.0
+    webserver-port=8081
+    webserver-allow-from=0.0.0.0/0
+    loglevel=6
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+zoneBootstrap:
+  apiTimeoutSeconds: 180
+  zones:
+    - name: bootstrap.example.test
+      nameservers:
+        - ns1.bootstrap.example.test

@@ -1,0 +1,50 @@
+From 964eb0ab89a559f0d8635475ea9416c35450a51f Mon Sep 17 00:00:00 2001
+From: MatchaScript <38482672+MatchaScript@users.noreply.github.com>
+Date: Sun, 2 Aug 2026 06:51:30 +0000
+Subject: [PATCH] usb: xhci-dwc3: Add DM_FLAG_OS_PREPARE flag
+
+xhci_dwc3_remove() shuts the PHYs down, releases the clocks and the
+resets and deregisters the controller, but it is never reached on the
+way out to the OS.  dm_remove_devices_active(), called from EFI
+ExitBootServices(), removes devices with DM_REMOVE_ACTIVE_ALL, and
+flags_remove() only matches drivers carrying DM_FLAG_ACTIVE_DMA or
+DM_FLAG_OS_PREPARE.  A dwc3 controller that U-Boot brought up -- through
+CONFIG_PREBOOT, "usb start" or a USB boot target -- is therefore handed
+over still running.
+
+On Apple M1 machines this shows up as a USB device attached before
+power-on not being enumerated at SuperSpeed once Linux has taken over;
+it appears only after being unplugged and reattached.  Setting the flag,
+so that xhci_dwc3_remove() runs, makes the symptom go away: in
+alternating boots on an Apple M1 Mac mini with an RTL8153 adapter
+attached, the unpatched build failed 3 out of 3 boots and the patched
+build passed 3 out of 3.
+
+Putting "usb stop" in the boot command instead has the same effect, as
+expected: usb_stop() passes DM_REMOVE_NORMAL, so it reaches the same
+xhci_dwc3_remove() no matter what the driver flags are.
+
+xhci-pci has carried DM_FLAG_OS_PREPARE since commit e3bbc1f74e05
+("usb: xhci-pci: Add DM_FLAG_OS_PREPARE flag") and ohci-da8xx sets it as
+well; xhci-dwc3 is the outlier.
+---
+ drivers/usb/host/xhci-dwc3.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/usb/host/xhci-dwc3.c b/drivers/usb/host/xhci-dwc3.c
+index e3e0ceff43e..009cf9d8579 100644
+--- a/drivers/usb/host/xhci-dwc3.c
++++ b/drivers/usb/host/xhci-dwc3.c
+@@ -250,6 +250,6 @@ U_BOOT_DRIVER(xhci_dwc3) = {
+ 	.ops = &xhci_usb_ops,
+ 	.priv_auto	= sizeof(struct xhci_ctrl),
+ 	.plat_auto	= sizeof(struct xhci_dwc3_plat),
+-	.flags = DM_FLAG_ALLOC_PRIV_DMA,
++	.flags = DM_FLAG_ALLOC_PRIV_DMA | DM_FLAG_OS_PREPARE,
+ };
+ #endif
+
+base-commit: 8aa706b2daa49b64102e44067d8514de8a26dc42
+-- 
+2.55.0
+

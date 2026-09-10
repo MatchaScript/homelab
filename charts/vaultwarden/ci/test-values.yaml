@@ -1,0 +1,40 @@
+# Values used by `helm lint` and `helm template` smoke checks.
+# Exercises every templated branch — Ingress, SSO env wiring, persistence —
+# without requiring a live cluster.
+
+namespace: vaultwarden
+
+env:
+  SIGNUPS_ALLOWED: "false"
+  DOMAIN: "https://vault.example.com"
+  ROCKET_PORT: "8080"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: ci-issuer
+  labels:
+    app: vaultwarden
+  hosts:
+    - host: vault.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - hosts:
+        - vault.example.com
+      secretName: vaultwarden-tls
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  storageClass: standard
+
+sso:
+  enabled: true
+  authority: "https://idp.example.com/realms/main"
+  scopes: "openid profile email offline_access"
+  pkce: "true"
+  clientCacheExpiration: "600"

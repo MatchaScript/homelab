@@ -1,0 +1,9 @@
+[Unit]
+Description=Create /var/swapfile sized from available RAM
+ConditionPathExists=!/var/swapfile
+Before=var-swapfile.swap
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /usr/lib/systemd/scripts/var-swapfile-create.sh
+RemainAfterExit=yes

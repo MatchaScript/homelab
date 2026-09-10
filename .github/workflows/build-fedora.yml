@@ -1,0 +1,292 @@
+name: Build and Push Fedora Images
+
+on:
+  schedule:
+    # 毎週日曜日 午前2時(UTC) = 11時(JST)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type to execute"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - default
+          - minimal
+          - micro
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: matchascript/fedora
+  # renovate: datasource=docker depName=quay.io/fedora/fedora
+  SYSBASE: "quay.io/fedora/fedora:latest@sha256:083414712cefa4ea7c219bb850b8d8027d0c7b8978bc743780269ebbdb700eb7"
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-24.04
+    outputs:
+      current_date: ${{ steps.set_date.outputs.current_date }}
+      version_id: ${{ steps.get_version.outputs.version_id }}
+      branch_name: ${{ steps.set_branch.outputs.branch_name }}
+      registry: ${{ steps.set_registry.outputs.registry }}
+      can_push: ${{ steps.set_push.outputs.can_push }}
+      variants: ${{ steps.set_matrix.outputs.variants }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set current date
+        id: set_date
+        env:
+          TZ: "Asia/Tokyo"
+        run: echo "current_date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Get VERSION_ID from base image
+        id: get_version
+        run: |
+          VERSION_ID=$(docker run --rm ${{ env.SYSBASE }} cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID=$(docker inspect ${{ env.SYSBASE }} --format='{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "")
+          fi
+
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "<no value>" ] || [ "$VERSION_ID" = "unknown" ]; then
+            echo "Warning: Could not detect VERSION_ID, using 'rawhide'"
+            VERSION_ID="rawhide"
+          fi
+
+          echo "version_id=$VERSION_ID" >> $GITHUB_OUTPUT
+          echo "Detected VERSION_ID: $VERSION_ID"
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Current branch: $BRANCH_NAME"
+
+      - name: Set registry
+        id: set_registry
+        run: |
+          REGISTRY="${{ inputs.target_registry || env.REGISTRY }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Set push permission
+        id: set_push
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "devel" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set build matrix
+        id: set_matrix
+        run: |
+          BUILD_TYPE="${{ inputs.build_type }}"
+          if [ -z "$BUILD_TYPE" ] || [ "$BUILD_TYPE" = "all" ]; then
+            VARIANTS='["default","minimal","micro"]'
+          else
+            VARIANTS="[\"$BUILD_TYPE\"]"
+          fi
+          echo "variants=$VARIANTS" >> $GITHUB_OUTPUT
+          echo "Build variants: $VARIANTS"
+
+  # ════════════════════════════════════════════════════
+  #  Build per (variant × arch)
+  # ════════════════════════════════════════════════════
+  build:
+    name: Build ${{ matrix.variant }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(needs.prepare.outputs.variants) }}
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Generate Tags
+        id: tags
+        env:
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          VARIANT: ${{ matrix.variant }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          # default は variant suffix なし、minimal/micro は -<variant> を付与
+          if [ "$VARIANT" = "default" ]; then
+            VARIANT_SUFFIX=""
+            VARIANT_TAG="latest"
+          else
+            VARIANT_SUFFIX="-${VARIANT}"
+            VARIANT_TAG="${VARIANT}"
+          fi
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAGS="${VERSION_ID}.${DATE_TAG}${VARIANT_SUFFIX}-${ARCH} ${VARIANT_TAG}-${ARCH} ${VERSION_ID}${VARIANT_SUFFIX}-${ARCH}"
+          else
+            TAGS="${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}${VARIANT_SUFFIX}-${ARCH} ${BRANCH_NAME}${VARIANT_SUFFIX}-${ARCH} ${VERSION_ID}-${BRANCH_NAME}${VARIANT_SUFFIX}-${ARCH}"
+          fi
+
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Generated tags: $TAGS"
+
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: "fedora-${{ matrix.variant }}"
+          description: "Fedora userspace image (${{ matrix.variant }} variant) for a homelab cluster"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.SYSBASE }}
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@719e3c40d8af9790c23eca13f7daa339f2867034 # v3
+        with:
+          context: ./containers
+          containerfiles: ./containers/base/${{ matrix.variant }}.Containerfile
+          image: ${{ env.IMAGE_NAME }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.labels.outputs.labels }}
+          build-args: |
+            SYSBASE=${{ env.SYSBASE }}
+            VERSION_ID=${{ needs.prepare.outputs.version_id }}
+
+      - name: Push to Registry
+        id: push_image
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute pushed references
+        id: pushed_refs
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          REGISTRY: ${{ needs.prepare.outputs.registry }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAGS: ${{ steps.tags.outputs.tags }}
+        run: |
+          REFS=()
+          for t in $TAGS; do
+            REFS+=("${REGISTRY}/${IMAGE_NAME}:${t}")
+          done
+          (IFS=,; echo "refs=${REFS[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.pushed_refs.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ════════════════════════════════════════════════════
+  #  Multi-arch manifest per variant
+  # ════════════════════════════════════════════════════
+  manifest:
+    name: Create Manifest (${{ matrix.variant }})
+    runs-on: ubuntu-26.04
+    needs: [prepare, build]
+    if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(needs.prepare.outputs.variants) }}
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+
+      - name: Create and Push Manifest Lists
+        id: manifest_push
+        env:
+          VERSION_ID: ${{ needs.prepare.outputs.version_id }}
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          VARIANT: ${{ matrix.variant }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          IMAGE="${REGISTRY}/${IMAGE_NAME}"
+
+          if [ "$VARIANT" = "default" ]; then
+            VARIANT_SUFFIX=""
+            VARIANT_TAG="latest"
+          else
+            VARIANT_SUFFIX="-${VARIANT}"
+            VARIANT_TAG="${VARIANT}"
+          fi
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            MANIFEST_TAGS="${VERSION_ID}.${DATE_TAG}${VARIANT_SUFFIX} ${VARIANT_TAG} ${VERSION_ID}${VARIANT_SUFFIX}"
+          else
+            MANIFEST_TAGS="${VERSION_ID}.${DATE_TAG}-${BRANCH_NAME}${VARIANT_SUFFIX} ${BRANCH_NAME}${VARIANT_SUFFIX} ${VERSION_ID}-${BRANCH_NAME}${VARIANT_SUFFIX}"
+          fi
+
+          PUSHED_REFS=()
+          for TAG in $MANIFEST_TAGS; do
+            echo "==> Creating manifest: ${IMAGE}:${TAG}"
+            buildah manifest create "${IMAGE}:${TAG}" \
+              "${IMAGE}:${TAG}-amd64" "${IMAGE}:${TAG}-arm64"
+            buildah manifest push --all "${IMAGE}:${TAG}" "docker://${IMAGE}:${TAG}"
+            PUSHED_REFS+=("${IMAGE}:${TAG}")
+          done
+
+          (IFS=,; echo "refs=${PUSHED_REFS[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.manifest_push.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

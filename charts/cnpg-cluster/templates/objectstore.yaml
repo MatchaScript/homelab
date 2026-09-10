@@ -1,0 +1,49 @@
+{{- if .Values.backups.enabled }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ include "cluster.objectStoreName" . }}
+  namespace: {{ include "cluster.namespace" . }}
+  labels:
+    {{- include "cluster.labels" . | nindent 4 }}
+    {{- with .Values.cluster.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  configuration:
+    {{- with .Values.backups.destinationPath }}
+    destinationPath: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.backups.endpointURL }}
+    endpointURL: {{ . | quote }}
+    {{- end }}
+    {{- if and .Values.backups.endpointCA.name .Values.backups.endpointCA.key }}
+    endpointCA:
+      name: {{ .Values.backups.endpointCA.name }}
+      key: {{ .Values.backups.endpointCA.key }}
+    {{- end }}
+    s3Credentials:
+      accessKeyId:
+        name: {{ include "cluster.backupSecretName" . }}
+        key: AWS_ACCESS_KEY_ID
+      secretAccessKey:
+        name: {{ include "cluster.backupSecretName" . }}
+        key: AWS_SECRET_ACCESS_KEY
+    wal:
+      {{- with .Values.backups.wal.compression }}
+      compression: {{ . }}
+      {{- end }}
+      {{- with .Values.backups.wal.encryption }}
+      encryption: {{ . }}
+      {{- end }}
+      maxParallel: {{ .Values.backups.wal.maxParallel }}
+    data:
+      {{- with .Values.backups.data.compression }}
+      compression: {{ . }}
+      {{- end }}
+      {{- with .Values.backups.data.encryption }}
+      encryption: {{ . }}
+      {{- end }}
+      jobs: {{ .Values.backups.data.jobs }}
+  retentionPolicy: {{ .Values.backups.retentionPolicy | quote }}
+{{- end }}

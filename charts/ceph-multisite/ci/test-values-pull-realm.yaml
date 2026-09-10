@@ -1,0 +1,23 @@
+# Secondary cluster: joins an existing realm via spec.pull.endpoint, in a
+# new zone within the same zoneGroup as the master.
+realm:
+  name: realm-a
+  pull:
+    endpoint: https://rgw-master.example.com:443
+
+zoneGroup:
+  name: zg-east
+
+zone:
+  name: zone-east-2
+  metadataPool:
+    failureDomain: host
+    replicated:
+      size: 3
+  dataPool:
+    failureDomain: host
+    replicated:
+      size: 3
+  preservePoolsOnDelete: true
+  customEndpoints:
+    - https://rgw-secondary.example.com:443

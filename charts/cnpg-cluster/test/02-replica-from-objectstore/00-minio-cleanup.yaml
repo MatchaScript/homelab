@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-cleanup
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: minio-cleanup
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: mc
+          image: quay.io/minio/mc:latest
+          env:
+            - name: MC_HOST_local
+              value: "http://minio:minio123@minio.minio.svc.cluster.local"
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              mc rm --recursive --force local/mybucket/replica || true
+              mc ls local/mybucket

@@ -1,0 +1,234 @@
+name: Build Kata Artifacts
+
+# Builds kata-containers from the fork carrying the netkit L3 patch and packs
+# the /opt/kata install tree into an artifact-only image that node images pull
+# in with `COPY --from=`. Dispatch-only until the cold build cost is known.
+
+on:
+  workflow_dispatch:
+    inputs:
+      kata_repo:
+        description: "Source repository to build"
+        type: string
+        default: MatchaScript/kata-containers
+      kata_ref:
+        description: "Commit or branch to build"
+        type: string
+        default: 9b6921e115b7ba4fee987a91beee14e57910165e
+      push:
+        description: "Push the artifact image to ghcr.io"
+        type: boolean
+        default: false
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: kata-artifacts
+
+jobs:
+  build-asset:
+    name: build-asset (${{ matrix.asset }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        asset:
+          - agent
+          - busybox
+          - cloud-hypervisor
+          - kernel
+          - pause-image
+          - qemu
+          - virtiofsd
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ inputs.kata_repo }}
+          ref: ${{ inputs.kata_ref }}
+          persist-credentials: false
+
+      - name: Build ${{ matrix.asset }}
+        run: |
+          make "${KATA_ASSET}-tarball"
+          build_dir=$(readlink -f build)
+          mkdir -p kata-build
+          cp "${build_dir}"/kata-static-"${KATA_ASSET}".tar.zst kata-build/
+        env:
+          KATA_ASSET: ${{ matrix.asset }}
+          ARTEFACT_REGISTRY: ghcr.io
+          ARTEFACT_REGISTRY_USERNAME: ${{ github.actor }}
+          ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TO_REGISTRY: "no"
+          USE_DEVMAPPER: ${{ matrix.asset == 'agent' && 'yes' || 'no' }}
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kata-asset-${{ matrix.asset }}-${{ matrix.arch }}
+          path: kata-build/kata-static-${{ matrix.asset }}.tar.zst
+          retention-days: 7
+          if-no-files-found: error
+
+  build-asset-rootfs:
+    name: build-asset-rootfs (rootfs-image, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    needs: build-asset
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ inputs.kata_repo }}
+          ref: ${{ inputs.kata_ref }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: kata-asset-*-${{ matrix.arch }}
+          path: kata-artifacts
+          merge-multiple: true
+
+      - name: Build rootfs-image
+        run: |
+          make install-prebuilt-artifacts
+          make DEPS= rootfs-image-tarball
+          build_dir=$(readlink -f build)
+          mkdir -p kata-build
+          cp "${build_dir}"/kata-static-rootfs-image.tar.zst kata-build/
+        env:
+          ARTEFACT_REGISTRY: ghcr.io
+          ARTEFACT_REGISTRY_USERNAME: ${{ github.actor }}
+          ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TO_REGISTRY: "no"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kata-asset-rootfs-image-${{ matrix.arch }}
+          path: kata-build/kata-static-rootfs-image.tar.zst
+          retention-days: 7
+          if-no-files-found: error
+
+  build-asset-shim-v2:
+    name: build-asset-shim-v2 (shim-v2-${{ matrix.impl }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        impl: [go, rust]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ inputs.kata_repo }}
+          ref: ${{ inputs.kata_ref }}
+          persist-credentials: false
+
+      - name: Build shim-v2-${{ matrix.impl }}
+        run: |
+          make "shim-v2-${IMPL}-tarball"
+          build_dir=$(readlink -f build)
+          mkdir -p kata-build
+          cp "${build_dir}"/kata-static-shim-v2-"${IMPL}".tar.zst kata-build/
+        env:
+          IMPL: ${{ matrix.impl }}
+          ARTEFACT_REGISTRY: ghcr.io
+          ARTEFACT_REGISTRY_USERNAME: ${{ github.actor }}
+          ARTEFACT_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TO_REGISTRY: "no"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kata-asset-shim-v2-${{ matrix.impl }}-${{ matrix.arch }}
+          path: kata-build/kata-static-shim-v2-${{ matrix.impl }}.tar.zst
+          retention-days: 7
+          if-no-files-found: error
+
+  package:
+    name: Package artifact image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: [build-asset, build-asset-rootfs, build-asset-shim-v2]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: kata-asset-*-amd64
+          path: kata-tarballs/amd64
+          merge-multiple: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: kata-asset-*-arm64
+          path: kata-tarballs/arm64
+          merge-multiple: true
+
+      - name: Unpack tarballs into a build context
+        run: |
+          for arch in amd64 arm64; do
+            mkdir -p "kata-root/${arch}"
+            for tarball in "kata-tarballs/${arch}"/*.tar.zst; do
+              echo "unpacking ${tarball}"
+              tar -I zstd -xf "${tarball}" -C "kata-root/${arch}"
+            done
+            test -x "kata-root/${arch}/opt/kata/bin/containerd-shim-kata-v2"
+            test -x "kata-root/${arch}/opt/kata/runtime-rs/bin/containerd-shim-kata-v2"
+            test -f "kata-root/${arch}/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-clh-runtime-rs.toml"
+          done
+
+      - name: Build artifact image
+        run: |
+          docker buildx create --use --driver docker-container --name kata-builder
+          if [[ "${PUSH}" == "true" ]]; then
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login -u "${{ github.actor }}" --password-stdin "${REGISTRY}"
+            target="${REGISTRY}/${OWNER,,}/${IMAGE_NAME}:${{ inputs.kata_ref }}"
+            output="--push"
+          else
+            target="${IMAGE_NAME}:latest"
+            output=""
+          fi
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --label org.opencontainers.image.source="https://github.com/${{ inputs.kata_repo }}" \
+            --label org.opencontainers.image.revision="${{ inputs.kata_ref }}" \
+            --label org.opencontainers.image.description="kata-containers /opt/kata install tree (netkit L3 patch)" \
+            -f containers/kata/Containerfile \
+            -t "${target}" \
+            ${output} \
+            kata-root
+          echo "built ${target}"
+        env:
+          PUSH: ${{ inputs.push }}
+          OWNER: ${{ github.repository_owner }}

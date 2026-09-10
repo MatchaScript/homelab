@@ -1,0 +1,26 @@
+apiVersion: v2
+name: ceph-multisite
+description: |
+  Packages the three Rook Ceph Object Multisite primitives — CephObjectRealm,
+  CephObjectZoneGroup, and CephObjectZone — as a single per-cluster unit, with
+  a conditional `spec.pull.endpoint` so the same chart serves both clusters
+  creating a new realm and clusters joining an existing one. Deployment of
+  rook-ceph itself and of the CephObjectStore that references the zone is
+  out of scope; this chart only renders the multisite topology CRs.
+type: application
+version: 0.1.0
+appVersion: "1.19"
+kubeVersion: ">=1.30.0-0"
+home: https://github.com/MatchaScript/homelab
+sources:
+  - https://github.com/MatchaScript/homelab
+keywords:
+  - rook
+  - ceph
+  - rook-ceph
+  - multisite
+  - rgw
+  - object-storage
+maintainers:
+  - name: MatchaScript
+    url: https://github.com/MatchaScript

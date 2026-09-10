@@ -1,0 +1,71 @@
+# Default values for vaultwarden.
+
+namespace: vaultwarden
+
+replicaCount: 1
+
+image:
+  repository: docker.io/vaultwarden/server
+  pullPolicy: IfNotPresent
+  # Empty defers to .Chart.AppVersion.
+  tag: ""
+  # Optional digest pin (e.g. "sha256:abc123…"). Renders as
+  # <repo>:<tag>@<digest> when set; skipped when empty. Kept separate
+  # from `tag` so Renovate's helm-values manager doesn't splice the
+  # digest into an empty tag and produce an invalid image reference.
+  digest: "sha256:d626d04934cd1192ad8ced1adb975099fca78cec33ab467d2d3c923cde7f3b0c"
+
+# Security settings
+hostUsers: false
+
+securityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  runAsNonRoot: true
+
+# Pod settings
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+terminationGracePeriodSeconds: 30
+
+resources:
+  limits:
+    memory: 256Mi
+    cpu: 250m
+  requests:
+    memory: 128Mi
+    cpu: 50m
+
+env:
+  SIGNUPS_ALLOWED: "true"
+  DOMAIN: ""
+  ROCKET_PORT: "8080"
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  labels: {}
+  hosts: []
+  tls: []
+
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 8Gi
+  storageClass: ""
+
+# SSO/OIDC settings
+sso:
+  enabled: false
+  authority: ""
+  scopes: "openid profile email offline_access"
+  pkce: "true"
+  clientCacheExpiration: "600"

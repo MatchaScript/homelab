@@ -1,0 +1,12 @@
+secretStore:
+  enabled: true
+  name: vault
+  vault:
+    server: "http://vault.vault.svc:8200"
+    namespace: ""
+    path: secret
+    version: v2
+    auth:
+      mountPath: kubernetes
+      role: placeholder
+externalSecrets: []

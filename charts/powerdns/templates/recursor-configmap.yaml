@@ -1,0 +1,13 @@
+{{- if .Values.recursor.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "powerdns.fullname" . }}-recursor
+  labels:
+    {{- include "powerdns.recursor.labels" . | nindent 4 }}
+data:
+  recursor.yml: |
+    {{- with .Values.recursor.config }}
+    {{- . | nindent 4 }}
+    {{- end }}
+{{- end }}

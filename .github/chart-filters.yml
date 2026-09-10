@@ -1,0 +1,13 @@
+# dorny/paths-filter definition, also used as the chart verification manifest:
+# a chart only gets a matrix entry (and therefore a kind+chainsaw e2e run) if
+# it is listed here. No entry = no CI e2e coverage = not eligible for
+# Renovate automerge. See docs/homelab/ARCHITECTURE.md for the design.
+cnpg-cluster:
+  - charts/cnpg-cluster/**
+powerdns:
+  - charts/powerdns/**
+  - charts/cnpg-cluster/**
+vault-eso:
+  - charts/vault-eso/**
+vaultwarden:
+  - charts/vaultwarden/**

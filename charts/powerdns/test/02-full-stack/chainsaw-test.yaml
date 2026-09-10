@@ -1,0 +1,70 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: full-stack
+spec:
+  timeouts:
+    apply: 30s
+    assert: 8m
+    cleanup: 2m
+  steps:
+    - name: Apply app-credentials Secret
+      try:
+        - apply:
+            file: ./app-secret.yaml
+
+    - name: Install the powerdns + cnpg-cluster stack (auth + recursor + dnsdist)
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade --install pdns "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./powerdns-values.yaml
+              helm upgrade --install pdns-db "${CHART_DIR}/../cnpg-cluster" \
+                --namespace "${NAMESPACE}" \
+                --values ./cnpg-cluster-values.yaml \
+                --wait --timeout 8m
+        - assert:
+            file: ./01-stack-assert.yaml
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+        - describe:
+            apiVersion: apps/v1
+            kind: Deployment
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns-recursor
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns-dnsdist
+
+    - name: Insert a test zone via psql
+      try:
+        - apply:
+            file: ./02-zone-create.yaml
+        - assert:
+            file: ./02-zone-create-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=zone-create
+
+    - name: Resolve a record through dnsdist
+      try:
+        - apply:
+            file: ./03-dns-query-via-dnsdist.yaml
+        - assert:
+            file: ./03-dns-query-via-dnsdist-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=dns-query-via-dnsdist
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=zone-create
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns-recursor
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns-dnsdist

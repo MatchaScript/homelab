@@ -1,0 +1,77 @@
+{{- if .Values.recursor.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "powerdns.fullname" . }}-recursor
+  labels:
+    {{- include "powerdns.recursor.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.recursor.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "powerdns.recursor.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "powerdns.recursor.selectorLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/recursor-configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.recursor.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.recursor.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.recursor.affinity }}
+      affinity:
+        {{- toYaml .Values.recursor.affinity | nindent 8 }}
+      {{- else if gt (int .Values.recursor.replicaCount) 1 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "powerdns.recursor.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      {{- end }}
+      containers:
+        - name: recursor
+          image: "{{ .Values.recursor.image.repository }}:{{ .Values.recursor.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.recursor.image.pullPolicy }}
+          ports:
+            - name: dns-tcp
+              containerPort: 5353
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 5353
+              protocol: UDP
+          readinessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: dns-tcp
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: recursor-config
+              mountPath: /etc/powerdns/recursor.yml
+              subPath: recursor.yml
+          resources:
+            {{- toYaml .Values.recursor.resources | nindent 12 }}
+      volumes:
+        - name: recursor-config
+          configMap:
+            name: {{ include "powerdns.fullname" . }}-recursor
+{{- end }}

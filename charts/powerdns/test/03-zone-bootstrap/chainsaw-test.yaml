@@ -1,0 +1,71 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: zone-bootstrap
+spec:
+  timeouts:
+    apply: 30s
+    assert: 8m
+    cleanup: 2m
+    exec: 8m
+  steps:
+    - name: Apply app-credentials Secret
+      try:
+        - apply:
+            file: ./app-secret.yaml
+
+    # The schema ConfigMap is rendered by the powerdns chart and consumed by
+    # CNPG initdb, so powerdns must be installed first. The zoneBootstrap hook
+    # is suppressed on this initial install because the database is not up yet.
+    - name: Install powerdns (zoneBootstrap suppressed)
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade --install pdns "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./powerdns-values.yaml \
+                --set "zoneBootstrap.zones=null"
+
+    - name: Install the CNPG database and wait until ready
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade --install pdns-db "${CHART_DIR}/../cnpg-cluster" \
+                --namespace "${NAMESPACE}" \
+                --values ./cnpg-cluster-values.yaml \
+                --wait --timeout 8m
+      catch:
+        - describe:
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns
+
+    # With the database and auth API up, the post-upgrade hook now fires and
+    # creates the zone. helm blocks on the hook Job, so this step fails if the
+    # hook fails.
+    - name: Upgrade powerdns to fire the zoneBootstrap hook
+      try:
+        - script:
+            content: |
+              set -eu
+              helm upgrade pdns "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./powerdns-values.yaml
+      catch:
+        - podLogs:
+            selector: app.kubernetes.io/component=zone-bootstrap
+        - podLogs:
+            selector: app.kubernetes.io/name=powerdns
+
+    - name: Verify the zone exists via the PowerDNS API
+      try:
+        - apply:
+            file: ./verify-zone.yaml
+        - assert:
+            file: ./verify-zone-assert.yaml
+      catch:
+        - podLogs:
+            selector: batch.kubernetes.io/job-name=verify-zone

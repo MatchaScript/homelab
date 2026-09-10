@@ -1,0 +1,18 @@
+# Patterns to ignore when building packages.
+# Operates the same as .gitignore.
+.DS_Store
+.git/
+.gitignore
+.idea/
+.vscode/
+*.tmproj
+*.bak
+*.swp
+*.tgz
+*.orig
+
+# Chart development cruft.
+Makefile
+ci/
+test/
+README.md

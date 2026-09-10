@@ -1,0 +1,44 @@
+{{- $alert := "CNPGClusterLogicalReplicationStopped" -}}
+{{- if not (has $alert .excludeRules) -}}
+alert: {{ $alert }}
+annotations:
+  summary: CNPG Cluster logical replication subscription stopped
+  description: |-
+    CloudNativePG Cluster's "{{ .namespace }}/{{ .cluster }}" "{{ "{{ .subname }}" }}" subscription is stopped.
+
+    Status: {{ .labels.stop_reason }}
+
+    The subscription is not actively replicating data. This could be intentional (disabled) or due to an issue preventing the subscription from working.
+  runbook_url: https://github.com/cloudnative-pg/charts/blob/main/charts/cluster/docs/runbooks/{{ $alert }}.md
+expr: |
+  (
+    # Explicitly disabled
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled),
+      "cluster", "$1", "job", ".+/(.+)"
+    ) == 0
+  )
+  or
+  (
+    # Enabled but no worker AND meaningful lag
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_enabled == 1),
+      "cluster", "$1", "job", ".+/(.+)"
+    )
+    unless on (namespace, job, subname, cluster)
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_pid > 0),
+      "cluster", "$1", "job", ".+/(.+)"
+    )
+    and on (namespace, job, subname, cluster)
+    label_replace(
+      max by (namespace, job, subname) (cnpg_pg_stat_subscription_buffered_lag_bytes),
+      "cluster", "$1", "job", ".+/(.+)"
+    ) > 1024*1024*100
+  )
+for: 5m
+labels:
+  severity: warning
+  namespace: {{ .namespace }}
+  cnpg_cluster: {{ .cluster }}
+{{- end -}}

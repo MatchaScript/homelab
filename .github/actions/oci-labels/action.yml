@@ -1,0 +1,69 @@
+name: "Generate OCI Image Labels"
+description: "Compute standard OCI image labels (org.opencontainers.image.*) for build steps. Emits both a newline-separated label list and a ready-to-use --label argument string."
+
+inputs:
+  title:
+    description: "Human-readable image title (org.opencontainers.image.title)."
+    required: true
+  description:
+    description: "Short image description (org.opencontainers.image.description)."
+    required: true
+  version:
+    description: "Image version (org.opencontainers.image.version). Typically VERSION_ID, kubelet version, or a date-stamped key."
+    required: true
+  base_name:
+    description: "Base image reference for org.opencontainers.image.base.name. Optional."
+    required: false
+    default: ""
+
+outputs:
+  labels:
+    description: "Newline-separated 'key=value' OCI labels. Suitable for redhat-actions/buildah-build@v2 'labels' input. For `podman build` / `buildah build`, iterate over each line and pass `--label \"$line\"` to preserve values containing spaces."
+    value: ${{ steps.gen.outputs.labels }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Compute OCI labels
+      id: gen
+      shell: bash
+      env:
+        IN_TITLE: ${{ inputs.title }}
+        IN_DESCRIPTION: ${{ inputs.description }}
+        IN_VERSION: ${{ inputs.version }}
+        IN_BASE_NAME: ${{ inputs.base_name }}
+        GH_REPOSITORY: ${{ github.repository }}
+        GH_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        GH_SHA: ${{ github.sha }}
+        GH_SERVER_URL: ${{ github.server_url }}
+      run: |
+        set -euo pipefail
+
+        CREATED="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+        REPO_URL="${GH_SERVER_URL}/${GH_REPOSITORY}"
+
+        declare -a PAIRS=(
+          "org.opencontainers.image.title=${IN_TITLE}"
+          "org.opencontainers.image.description=${IN_DESCRIPTION}"
+          "org.opencontainers.image.version=${IN_VERSION}"
+          "org.opencontainers.image.created=${CREATED}"
+          "org.opencontainers.image.revision=${GH_SHA}"
+          "org.opencontainers.image.source=${REPO_URL}"
+          "org.opencontainers.image.url=${REPO_URL}"
+          "org.opencontainers.image.documentation=${REPO_URL}"
+          "org.opencontainers.image.vendor=${GH_REPOSITORY_OWNER}"
+          "org.opencontainers.image.authors=${GH_REPOSITORY_OWNER}"
+        )
+
+        if [ -n "${IN_BASE_NAME}" ]; then
+          PAIRS+=("org.opencontainers.image.base.name=${IN_BASE_NAME}")
+        fi
+
+        {
+          echo "labels<<__OCI_LABELS_EOF__"
+          printf '%s\n' "${PAIRS[@]}"
+          echo "__OCI_LABELS_EOF__"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "OCI labels:"
+        printf '  %s\n' "${PAIRS[@]}"

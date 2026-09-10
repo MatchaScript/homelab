@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: streaming-write
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: streaming-write
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: ghcr.io/cloudnative-pg/postgresql:16
+          env:
+            - name: PGURI
+              valueFrom:
+                secretKeyRef:
+                  name: primary-cnpg-cluster-app
+                  key: uri
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -eu
+              psql "$PGURI" <<'SQL'
+              CREATE TABLE IF NOT EXISTS streaming_probe (id INT PRIMARY KEY);
+              INSERT INTO streaming_probe (id) VALUES (1);
+              SQL

@@ -1,0 +1,14 @@
+{{- if .Values.postgresql.schemaConfigMap.create }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "powerdns.fullname" . }}-schema
+  labels:
+    {{- include "powerdns.labels" . | nindent 4 }}
+data:
+  schema.sql: |
+    {{- with .Values.postgresql.schemaConfigMap.role }}
+    SET ROLE {{ . }};
+    {{- end }}
+    {{- .Files.Get "files/schema.pgsql.sql" | nindent 4 }}
+{{- end }}

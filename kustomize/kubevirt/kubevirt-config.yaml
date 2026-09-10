@@ -1,0 +1,38 @@
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+spec:
+  certificateRotateStrategy: {}
+  configuration:
+    developerConfiguration:
+      featureGates:
+        - MultiArchitecture
+        - Sidecar
+    imagePullPolicy: IfNotPresent
+  customizeComponents:
+    patches:
+      - resourceName: virt-operator
+        resourceType: Deployment
+        type: json
+        patch: |
+          [
+            { "op": "replace", "path": "/spec/replicas", "value": 1 }
+          ]
+      - resourceName: virt-controller
+        resourceType: Deployment
+        type: json
+        patch: |
+          [
+            { "op": "replace", "path": "/spec/replicas", "value": 1 }
+          ]
+      - resourceName: virt-api
+        resourceType: Deployment
+        type: json
+        patch: |
+          [
+            { "op": "replace", "path": "/spec/replicas", "value": 1 }
+          ]
+  imagePullPolicy: IfNotPresent
+  workloadUpdateStrategy: {}

@@ -1,0 +1,18 @@
+# useradd defaults file
+#
+# HOME is /var/home, not the shadow-utils default /home (/home is a symlink to
+# var/home on a bootc system).  rpm-ostree's compose normally rewrites this via
+# postprocess_useradd, but that runs against usr/etc/default/useradd and the
+# fedora-minimal manifest does not install shadow-utils, so there is no file to
+# rewrite.  The same compose still flips file_contexts.subs_dist to
+# "/home /var/home" (postprocess_subs_dist), which leaves SELinux resolving home
+# paths through /var/home while genhomedircon wrote the rules under /home.
+# Setting HOME here and regenerating the policy store in the base Containerfile
+# puts both halves on the /var/home side, matching fedora-bootc standard.
+GROUP=100
+HOME=/var/home
+INACTIVE=-1
+EXPIRE=
+SHELL=/bin/bash
+SKEL=/etc/skel
+CREATE_MAIL_SPOOL=yes

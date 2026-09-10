@@ -1,0 +1,7 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  labels:
+    cnpg.io/scheduled-backup: scheduled-cnpg-cluster-every-minute
+status:
+  phase: completed

@@ -1,0 +1,45 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: auth-only
+spec:
+  timeouts:
+    apply: 30s
+    assert: 5m
+    cleanup: 2m
+  steps:
+    - name: Configure Vault Kubernetes-auth role for this namespace
+      try:
+        - script:
+            content: |
+              set -eu
+              ROLE="vault-eso-auth-only-${NAMESPACE}"
+              kubectl -n vault exec statefulset/vault -- sh -eu -c "
+                export VAULT_TOKEN=root
+                export VAULT_ADDR=http://127.0.0.1:8200
+                vault write auth/kubernetes/role/${ROLE} \
+                  bound_service_account_names=eso \
+                  bound_service_account_namespaces=${NAMESPACE} \
+                  policies=vault-eso-test \
+                  ttl=1h
+              "
+
+    - name: Install vault-eso (SecretStore + ServiceAccount only)
+      try:
+        - script:
+            content: |
+              set -eu
+              ROLE="vault-eso-auth-only-${NAMESPACE}"
+              helm upgrade --install ve "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./vault-eso-values.yaml \
+                --set "secretStore.vault.auth.role=${ROLE}"
+        - assert:
+            file: ./01-store-ready-assert.yaml
+      catch:
+        - describe:
+            apiVersion: external-secrets.io/v1
+            kind: SecretStore
+        - podLogs:
+            namespace: external-secrets
+            selector: app.kubernetes.io/name=external-secrets

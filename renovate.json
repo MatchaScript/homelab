@@ -1,0 +1,115 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "baseBranches": ["main"],
+  "dockerfile": {
+    "fileMatch": [
+      "(^|/|\\.)Containerfile$",
+      "(^|/)Containerfile[^/]*$"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/)Chart\\.yaml$"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s*depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+appVersion:\\s*[\"']?(?<currentValue>.+?)[\"']?\\s"
+      ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/)kustomize/[^/]+/kustomization\\.yaml$"
+      ],
+      "matchStrings": [
+        "raw\\.githubusercontent\\.com/(?<depName>[^/]+/[^/]+)/(?<currentValue>[^/]+)/"
+      ],
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "^\\.github/workflows/[^/]+\\.ya?ml$"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+\\S+:\\s*[\"']?[^\"'\\s:]+:(?<currentValue>[^@\"'\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "fileMatch": [
+        "(^|/|\\.)Containerfile$",
+        "(^|/)Containerfile[^/]*$"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\s+ARG\\s+\\w+=[\"']?(?<currentValue>[^\"'\\s]+)[\"']?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Auto-merge digest/patch updates in files covered by CI Gate (build+smoke for images, kind+chainsaw e2e for charts; see .github/image-manifest.yml and .github/chart-filters.yml). Kept in exact 1:1 sync with those two manifests: a broader glob here would let an unverified pin bump auto-merge on a green gate. Datasources are restricted to docker/helm because those are what CI actually verifies; e.g. an actions/runner github-releases bump in build-gha-runner.yml is not exercised by the verify build and must not auto-merge. NOTE: this trusts the upstream registries each build pulls FROM (e.g. quay.io/fedora does not sigstore-sign its images); the gate is a build+smoke/e2e check, not a provenance check, so this is an accepted-risk auto-merge.",
+      "matchDatasources": [
+        "docker",
+        "helm"
+      ],
+      "matchFileNames": [
+        ".github/workflows/build-bootc.yml",
+        ".github/workflows/build-fedora.yml",
+        ".github/workflows/build-kubernetes.yml",
+        ".github/workflows/build-development.yml",
+        ".github/workflows/build-gha-runner.yml",
+        "containers/bootc/kubernetes/base.Containerfile",
+        "charts/cnpg-cluster/**",
+        "charts/powerdns/**",
+        "charts/vault-eso/**",
+        "charts/vaultwarden/**"
+      ],
+      "matchUpdateTypes": [
+        "digest",
+        "patch"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Exclude self-built ghcr.io/matchascript/* images from auto-merge even though their pins live in files covered by the rule above. CI Gate verifies the consumer build still succeeds against the new digest, but it is not a provenance check on our own supply chain, so rollout timing stays a human decision.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/matchascript/**"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Group all Helm chart updates together",
+      "matchManagers": [
+        "helmv3"
+      ],
+      "groupName": "helm charts"
+    },
+    {
+      "description": "Group all GitHub Actions updates together",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Strip leading 'v' from actions/runner* GitHub release tags",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": [
+        "actions/runner",
+        "actions/runner-container-hooks"
+      ],
+      "extractVersion": "^v(?<version>.+)$"
+    }
+  ]
+}

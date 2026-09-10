@@ -1,0 +1,168 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: default
+spec:
+  timeouts:
+    apply: 30s
+    assert: 5m
+    cleanup: 2m
+    exec: 5m
+  steps:
+    - name: Pre-create secrets, MinIO, and a dex OIDC stub
+      try:
+        - script:
+            content: |
+              set -eu
+              kubectl -n "${NAMESPACE}" create secret generic opencloud-admin \
+                --from-literal=adminPassword=admin-test
+              kubectl -n "${NAMESPACE}" create secret generic opencloud-s3 \
+                --from-literal=accessKey=opencloud \
+                --from-literal=secretKey=opencloud-secret-key
+
+              ISSUER="http://dex.${NAMESPACE}.svc.cluster.local:5556"
+              export ISSUER
+
+              cat <<EOF | kubectl -n "${NAMESPACE}" apply -f -
+              ---
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: minio
+                labels: { app: minio }
+              spec:
+                replicas: 1
+                selector: { matchLabels: { app: minio } }
+                template:
+                  metadata: { labels: { app: minio } }
+                  spec:
+                    containers:
+                      - name: minio
+                        image: docker.io/minio/minio:latest
+                        args: ["server", "/data", "--console-address", ":9001"]
+                        env:
+                          - { name: MINIO_ROOT_USER,     value: opencloud }
+                          - { name: MINIO_ROOT_PASSWORD, value: opencloud-secret-key }
+                        ports:
+                          - { containerPort: 9000, name: s3 }
+                        readinessProbe:
+                          httpGet: { path: /minio/health/ready, port: 9000 }
+              ---
+              apiVersion: v1
+              kind: Service
+              metadata: { name: minio }
+              spec:
+                selector: { app: minio }
+                ports:
+                  - { name: s3, port: 9000, targetPort: 9000 }
+              ---
+              apiVersion: v1
+              kind: ConfigMap
+              metadata: { name: dex-config }
+              data:
+                config.yaml: |
+                  issuer: ${ISSUER}
+                  storage:
+                    type: memory
+                  web:
+                    http: 0.0.0.0:5556
+                  oauth2:
+                    skipApprovalScreen: true
+                  enablePasswordDB: true
+                  staticClients:
+                    - id: web
+                      name: OpenCloud Web
+                      public: true
+                      redirectURIs:
+                        - https://cloud.test/
+                  staticPasswords:
+                    - email: admin@cloud.test
+                      # bcrypt of "password"; only here to make the password DB valid.
+                      hash: \$2y\$10\$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W
+                      username: admin
+                      userID: 08a8684b-db88-4b73-90a9-3cd1661f5466
+              ---
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: dex
+                labels: { app: dex }
+              spec:
+                replicas: 1
+                selector: { matchLabels: { app: dex } }
+                template:
+                  metadata: { labels: { app: dex } }
+                  spec:
+                    containers:
+                      - name: dex
+                        image: ghcr.io/dexidp/dex:v2.41.1
+                        command: ["/usr/local/bin/dex"]
+                        args: ["serve", "/etc/dex/config.yaml"]
+                        ports:
+                          - { containerPort: 5556, name: http }
+                        readinessProbe:
+                          httpGet: { path: /.well-known/openid-configuration, port: 5556 }
+                        volumeMounts:
+                          - { name: config, mountPath: /etc/dex }
+                    volumes:
+                      - name: config
+                        configMap: { name: dex-config }
+              ---
+              apiVersion: v1
+              kind: Service
+              metadata: { name: dex }
+              spec:
+                selector: { app: dex }
+                ports:
+                  - { name: http, port: 5556, targetPort: 5556 }
+              EOF
+
+              kubectl -n "${NAMESPACE}" rollout status deploy/minio --timeout=4m
+              kubectl -n "${NAMESPACE}" rollout status deploy/dex   --timeout=4m
+
+    - name: Install opencloud chart against the in-cluster dex
+      try:
+        - script:
+            content: |
+              set -eu
+              ISSUER="http://dex.${NAMESPACE}.svc.cluster.local:5556"
+              # Don't --wait; OC's startup probe budget plus image pull on a
+              # cold kind node easily exceeds helm's wait window. Assertions
+              # below carry their own 5m budget.
+              helm upgrade --install oc "${CHART_DIR}" \
+                --namespace "${NAMESPACE}" \
+                --values ./opencloud-values.yaml \
+                --set oidc.issuer="${ISSUER}" \
+                --set oidc.accountUrl="${ISSUER}/account"
+        - assert:
+            file: ./01-resources-assert.yaml
+      catch:
+        - describe:
+            apiVersion: apps/v1
+            kind: Deployment
+        - describe:
+            apiVersion: v1
+            kind: PersistentVolumeClaim
+        - podLogs:
+            selector: app.kubernetes.io/name=opencloud
+        - podLogs:
+            selector: app=dex
+        - podLogs:
+            selector: app=minio
+
+    - name: Hit /health through the in-cluster Service
+      try:
+        - script:
+            content: |
+              set -eu
+              # --attach + --rm makes kubectl run inherit the container exit
+              # status, so curl's -f failure mode bubbles up as a step failure.
+              kubectl -n "${NAMESPACE}" run httpcheck \
+                --image=curlimages/curl:8.10.1 \
+                --restart=Never --rm -i --quiet --attach \
+                --command -- \
+                curl -fsS --max-time 10 -o /dev/null -w 'http=%{http_code}\n' \
+                  http://oc-opencloud:9200/health
+      catch:
+        - podLogs:
+            selector: app.kubernetes.io/name=opencloud

@@ -1,0 +1,25 @@
+secretStore:
+  enabled: true
+  name: vault
+  vault:
+    server: "http://vault.vault.svc:8200"
+    namespace: ""
+    path: secret
+    version: v2
+    auth:
+      mountPath: kubernetes
+      role: placeholder
+
+externalSecrets:
+  - name: app-credentials
+    refreshInterval: 30s
+    creationPolicy: Owner
+    data:
+      - secretKey: password
+        remoteRef:
+          key: services/roundtrip/cred
+          property: password
+      - secretKey: api_token
+        remoteRef:
+          key: services/roundtrip/cred
+          property: api_token
