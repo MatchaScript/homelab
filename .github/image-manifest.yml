@@ -77,6 +77,17 @@
   containerfile: containers/bootc/development/base.Containerfile
   build_arg: DEV_BASE
 
+- key: che-development-on-ubuntu
+  watch_paths:
+    - .github/actions/setup-podman/
+    - containers/che/development.Containerfile
+    - containers/overlay.d/01-container-mirror/
+    - .github/workflows/build-che-development.yml
+  pin_source: .github/workflows/build-che-development.yml
+  pin_env_key: DEV_BASE
+  containerfile: containers/che/development.Containerfile
+  build_arg: DEV_BASE
+
 - key: gha-runner-on-fedora
   watch_paths:
     - .github/actions/setup-podman/
