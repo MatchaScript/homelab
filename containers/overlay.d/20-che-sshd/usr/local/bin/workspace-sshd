@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+key="$HOME/.ssh/ssh_host_ed25519_key"
+mkdir -p "$HOME/.ssh"
+[ -f "$key" ] || ssh-keygen -q -t ed25519 -N '' -f "$key"
+exec /usr/sbin/sshd -D -e
