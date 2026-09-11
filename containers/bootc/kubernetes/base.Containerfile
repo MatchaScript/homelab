@@ -2,7 +2,7 @@
 ARG SYSBASE
 ARG KUBEADM_VERSION="v1.35"
 # Built by .github/workflows/build-kata.yml from the netkit L3 fork
-ARG KATA_REF="9b6921e115b7ba4fee987a91beee14e57910165e"
+ARG KATA_REF="adc97ba94d89d6f612e47ed41f6a863c6f485c11"
 
 # Stage 1: Download kubeadm binary
 FROM registry.fedoraproject.org/fedora-minimal:latest@sha256:f2e7d9d06f6ecbf73334f1f9a9a7cc50862858f7eb692f610888146c2fa30d01 AS kubeadm-downloader
