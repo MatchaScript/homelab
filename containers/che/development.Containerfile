@@ -47,6 +47,16 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && ln -s /usr/bin/fdfind /usr/local/bin/fd \
     && locale-gen en_US.UTF-8
 
+# Docker CLI only: the daemon runs in the workspace's docker:dind sidecar and is
+# reached through DOCKER_HOST.
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && . /etc/os-release \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+       docker-ce-cli docker-buildx-plugin docker-compose-plugin \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=tool-fetch /tmp/bin/ /usr/local/bin/
 COPY overlay.d/20-che-sshd/ /
 

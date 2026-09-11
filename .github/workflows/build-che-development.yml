@@ -94,9 +94,11 @@ jobs:
             id | grep -q "uid=1234(user) gid=0(root)"
             test "$HOME" = /home/user
             command -v nohup
-            for t in zsh git podman pasta mise chezmoi uv kubectl helm k9s tofu bao gh starship argocd cilium hubble fd rg; do
+            for t in zsh git podman pasta mise chezmoi uv kubectl helm k9s tofu bao gh starship argocd cilium hubble fd rg docker; do
               command -v "$t" >/dev/null || { echo "missing: $t"; exit 1; }
             done
+            docker buildx version
+            docker compose version
           '
           sudo podman run -d --name sshd-test temp-dev
           sleep 3
