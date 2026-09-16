@@ -111,6 +111,14 @@
         "actions/runner-container-hooks"
       ],
       "extractVersion": "^v(?<version>.+)$"
+    },
+    {
+      "description": "Strip leading 'v' from MatchaScript/totan GitHub release tags",
+      "matchDatasources": ["github-releases"],
+      "matchPackageNames": [
+        "MatchaScript/totan"
+      ],
+      "extractVersion": "^v(?<version>.+)$"
     }
   ]
 }
