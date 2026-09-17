@@ -14,6 +14,11 @@ images:
 # The nodes scan /var/lib/cni/bin for CNI plugins (CRI-O plugin_dirs), so the
 # daemon's binDir, the installer's -d and the cnibin mount are set to it. The
 # mount path must equal the host path (multus-daemon resolves plugins by it).
+# The DaemonSet patch is a strategic merge patch addressed by container, init
+# container and volume name, so an upstream reorder does not break it; the
+# volumeMounts merge by mountPath, so the upstream /opt/cni/bin mount of the
+# same volume stays beside the new one (same host directory mounted twice
+# inside the pod; harmless).
 patches:
   - target:
       kind: ConfigMap
@@ -36,19 +41,33 @@ patches:
               "multusConfigFile": "auto",
               "socketDir": "/host/run/multus/"
           }
-  - target:
+  - patch: |
+      apiVersion: apps/v1
       kind: DaemonSet
-      name: kube-multus-ds
-    patch: |
-      - op: replace
-        path: /spec/template/spec/volumes/1/hostPath/path
-        value: /var/lib/cni/bin
-      - op: replace
-        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
-        value: /var/lib/cni/bin
-      - op: replace
-        path: /spec/template/spec/initContainers/0/command/2
-        value: /host/var/lib/cni/bin
-      - op: replace
-        path: /spec/template/spec/initContainers/0/volumeMounts/0/mountPath
-        value: /host/var/lib/cni/bin
+      metadata:
+        name: kube-multus-ds
+        namespace: kube-system
+      spec:
+        template:
+          spec:
+            containers:
+              - name: kube-multus
+                volumeMounts:
+                  - name: cnibin
+                    mountPath: /var/lib/cni/bin
+            initContainers:
+              - name: install-multus-binary
+                command:
+                  - /usr/src/multus-cni/bin/install_multus
+                  - -d
+                  - /host/var/lib/cni/bin
+                  - -t
+                  - thick
+                volumeMounts:
+                  - name: cnibin
+                    mountPath: /host/var/lib/cni/bin
+                    mountPropagation: Bidirectional
+            volumes:
+              - name: cnibin
+                hostPath:
+                  path: /var/lib/cni/bin
