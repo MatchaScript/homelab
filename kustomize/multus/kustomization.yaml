@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kube-system
+
+resources:
+  - https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/v4.3.1/deployments/multus-daemonset-thick.yml
+
+# The manifest points at the floating snapshot-thick tag; pin the release.
+images:
+  - name: ghcr.io/k8snetworkplumbingwg/multus-cni
+    newTag: v4.3.1-thick
+
+# The nodes scan /var/lib/cni/bin for CNI plugins (CRI-O plugin_dirs), so the
+# daemon's binDir, the installer's -d and the cnibin mount are set to it. The
+# mount path must equal the host path (multus-daemon resolves plugins by it).
+patches:
+  - target:
+      kind: ConfigMap
+      name: multus-daemon-config
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: multus-daemon-config
+      data:
+        daemon-config.json: |
+          {
+              "chrootDir": "/hostroot",
+              "cniVersion": "0.3.1",
+              "logLevel": "verbose",
+              "logToStderr": true,
+              "binDir": "/var/lib/cni/bin",
+              "cniConfigDir": "/host/etc/cni/net.d",
+              "multusAutoconfigDir": "/host/etc/cni/net.d",
+              "multusConfigFile": "auto",
+              "socketDir": "/host/run/multus/"
+          }
+  - target:
+      kind: DaemonSet
+      name: kube-multus-ds
+    patch: |
+      - op: replace
+        path: /spec/template/spec/volumes/1/hostPath/path
+        value: /var/lib/cni/bin
+      - op: replace
+        path: /spec/template/spec/containers/0/volumeMounts/1/mountPath
+        value: /var/lib/cni/bin
+      - op: replace
+        path: /spec/template/spec/initContainers/0/command/2
+        value: /host/var/lib/cni/bin
+      - op: replace
+        path: /spec/template/spec/initContainers/0/volumeMounts/0/mountPath
+        value: /host/var/lib/cni/bin
