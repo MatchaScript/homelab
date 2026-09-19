@@ -32,6 +32,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     sudo \
     systemd-networkd \
     systemd-resolved \
+    btrfs-progs \
     policycoreutils-python-utils \
     setools-console \
     audit \
