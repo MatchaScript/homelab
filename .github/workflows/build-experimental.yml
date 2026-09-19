@@ -192,16 +192,20 @@ jobs:
             --rm --privileged \
             --security-opt label=type:unconfined_t \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
-            -v "$(pwd)/${CONTEXT_DIR}/bootc/experimental/disk.toml":/disk.toml:ro \
             -v "$(pwd)/output":/output \
             ghcr.io/osbuild/image-builder-cli:latest \
             build qcow2 \
             --bootc-ref localhost/temp-exp-${{ matrix.arch }}:latest \
             --bootc-default-fs btrfs \
-            --blueprint /disk.toml \
             --output-dir /output
           qcow2="$(find output -name '*.qcow2' | head -1)"
           mv "$qcow2" output/disk.qcow2
+          # Grow the qcow2 to 32 GiB. bootc-generic-growpart.service in the base
+          # image grows the root partition and filesystem to fill the disk at boot.
+          sudo apt-get update
+          sudo apt-get install -y qemu-utils
+          sudo qemu-img resize output/disk.qcow2 32G
+          sudo qemu-img info output/disk.qcow2
           ls -lh output/disk.qcow2
 
       - name: Build container-disk image
