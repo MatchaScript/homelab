@@ -1,0 +1,17 @@
+version = 4
+
+[plugins]
+  [plugins.'io.containerd.cri.v1.runtime']
+    [plugins.'io.containerd.cri.v1.runtime'.containerd]
+      [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes]
+        [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc]
+          [plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runc.options]
+            SystemdCgroup = true
+
+    [plugins.'io.containerd.cri.v1.runtime'.cni]
+      bin_dirs = ['/var/lib/cni/bin', '/usr/libexec/cni']
+      conf_dir = '/var/lib/cni/net.d'
+
+  # Kept from the config.toml the containerd package ships
+  [plugins.'io.containerd.internal.v1.opt']
+    path = '/var/lib/containerd/opt'

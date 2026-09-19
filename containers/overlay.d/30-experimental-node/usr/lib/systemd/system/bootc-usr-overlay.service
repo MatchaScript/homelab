@@ -1,0 +1,18 @@
+[Unit]
+Description=Transient writable overlay on /usr
+Documentation=man:bootc(8)
+ConditionPathExists=/run/ostree-booted
+# The overlay has to be in place before anything that installs into /usr, so
+# run alongside the other early bootc units rather than at multi-user.
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target
+Before=basic.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/bootc usr-overlay
+
+[Install]
+WantedBy=multi-user.target

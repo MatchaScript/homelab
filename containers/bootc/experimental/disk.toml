@@ -1,0 +1,6 @@
+# image-builder-cli blueprint for the experimental Kubernetes node qcow2.
+# Bootc image types only support "/" and "/boot" in [[customizations.filesystem]];
+# this sets the root filesystem to a minimum of 32 GiB.
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = 34359738368

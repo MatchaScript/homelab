@@ -1,0 +1,317 @@
+name: Build Experimental Kubernetes node image
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  IMAGE: fedora-kubernetes-experimental
+  DISK_IMAGE: fedora-kubernetes-experimental-disk
+  # renovate: datasource=docker depName=ghcr.io/matchascript/fedora-bootc
+  SYSBASE: "ghcr.io/matchascript/fedora-bootc:latest"
+  CONTEXT_DIR: ./containers
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-26.04
+    outputs:
+      current_date: ${{ steps.compute.outputs.current_date }}
+      version_id: ${{ steps.compute.outputs.version_id }}
+      branch_name: ${{ steps.compute.outputs.branch_name }}
+      registry: ${{ steps.compute.outputs.registry }}
+      can_push: ${{ steps.compute.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Compute build metadata
+        id: compute
+        env:
+          TZ: "Asia/Tokyo"
+          INPUT_REGISTRY: ${{ inputs.target_registry }}
+        run: |
+          set -euo pipefail
+
+          DATE="$(date +'%Y%m%d')"
+          echo "current_date=$DATE" >> "$GITHUB_OUTPUT"
+
+          VERSION_ID=$(sudo podman run --rm "$SYSBASE" cat /etc/os-release | grep '^VERSION_ID=' | cut -d= -f2 | tr -d '"' 2>/dev/null || echo "")
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID=$(sudo podman inspect "$SYSBASE" --format='{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "rawhide")
+          fi
+          if [ -z "$VERSION_ID" ] || [ "$VERSION_ID" = "<no value>" ] || [ "$VERSION_ID" = "unknown" ]; then
+            VERSION_ID="rawhide"
+          fi
+          echo "version_id=$VERSION_ID" >> "$GITHUB_OUTPUT"
+          echo "Fedora VERSION_ID: $VERSION_ID"
+
+          BRANCH="${GITHUB_REF_NAME//\//-}"
+          echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+          REG="${INPUT_REGISTRY:-${REGISTRY}}"
+          echo "registry=$REG" >> "$GITHUB_OUTPUT"
+
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "devel" ]; then
+            echo "can_push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build bootc image, convert to qcow2, wrap as container-disk
+  #  — amd64 / arm64
+  # ════════════════════════════════════════════════════
+  build:
+    name: Build experimental image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Generate OCI labels (bootc)
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.IMAGE }}
+          description: "Experimental Kubernetes node bootc image"
+          version: "${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}"
+          base_name: ${{ env.SYSBASE }}
+
+      - name: Build bootc image
+        env:
+          OCI_LABELS: ${{ steps.labels.outputs.labels }}
+        run: |
+          set -euo pipefail
+          LABEL_ARGS=()
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            LABEL_ARGS+=(--label "$line")
+          done <<< "$OCI_LABELS"
+
+          sudo podman build \
+            --platform linux/${{ matrix.arch }} \
+            --security-opt=label=disable \
+            --cap-add=all \
+            --device /dev/fuse \
+            --build-arg SYSBASE="${SYSBASE}" \
+            "${LABEL_ARGS[@]}" \
+            --tag temp-exp-${{ matrix.arch }} \
+            -f "${CONTEXT_DIR}/bootc/experimental/kubernetes-node.Containerfile" \
+            "${CONTEXT_DIR}"
+
+      - name: Rechunk bootc image
+        run: |
+          sudo podman run \
+            --rm --privileged \
+            --security-opt=label=disable \
+            -v /var/lib/containers:/var/lib/containers:z \
+            quay.io/centos-bootc/centos-bootc:stream10 \
+            /usr/libexec/bootc-base-imagectl rechunk \
+            localhost/temp-exp-${{ matrix.arch }}:latest localhost/rechunked-temp-exp-${{ matrix.arch }}:latest
+          sudo podman tag localhost/rechunked-temp-exp-${{ matrix.arch }}:latest localhost/temp-exp-${{ matrix.arch }}:latest
+          sudo podman rmi localhost/rechunked-temp-exp-${{ matrix.arch }}:latest
+
+      - name: Generate tags (bootc)
+        id: bootc-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: ${{ matrix.arch }}
+
+      - name: Login to registry
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin "${{ needs.prepare.outputs.registry }}"
+
+      - name: Tag and push bootc image
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          TAGS: ${{ steps.bootc-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $(echo "$TAGS" | tr ',' ' '); do
+            sudo podman tag temp-exp-${{ matrix.arch }} "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+      - name: Sign bootc image (cosign keyless)
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.bootc-tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Convert bootc image to qcow2, wrap as container-disk ──
+
+      - name: Convert bootc image to qcow2
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          sudo podman run \
+            --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            -v "$(pwd)/${CONTEXT_DIR}/bootc/experimental/disk.toml":/disk.toml:ro \
+            -v "$(pwd)/output":/output \
+            ghcr.io/osbuild/image-builder-cli:latest \
+            build qcow2 \
+            --bootc-ref localhost/temp-exp-${{ matrix.arch }}:latest \
+            --bootc-default-fs btrfs \
+            --blueprint /disk.toml \
+            --output-dir /output
+          qcow2="$(find output -name '*.qcow2' | head -1)"
+          mv "$qcow2" output/disk.qcow2
+          ls -lh output/disk.qcow2
+
+      - name: Build container-disk image
+        run: |
+          set -euo pipefail
+          sudo podman build \
+            --platform linux/${{ matrix.arch }} \
+            --tag temp-exp-disk-${{ matrix.arch }} \
+            -f "${CONTEXT_DIR}/bootc/development/disk.Containerfile" \
+            output/
+
+      - name: Generate tags (container-disk)
+        id: disk-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DISK_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: ${{ matrix.arch }}
+
+      - name: Tag and push container-disk image
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        env:
+          TAGS: ${{ steps.disk-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+          for tag in $(echo "$TAGS" | tr ',' ' '); do
+            sudo podman tag temp-exp-disk-${{ matrix.arch }} "${tag}"
+            sudo podman push "${tag}"
+            echo "Pushed: ${tag}"
+          done
+
+      - name: Sign container-disk image (cosign keyless)
+        if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.disk-tags.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── bootc / container-disk multi-arch manifests ──
+  manifest:
+    name: Create experimental manifests
+    runs-on: ubuntu-26.04
+    needs: [prepare, build]
+    if: ${{ inputs.push_images == true && needs.prepare.outputs.can_push == 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Podman
+        uses: ./.github/actions/setup-podman
+
+      - name: Login to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login -u "${{ github.actor }}" --password-stdin "${{ needs.prepare.outputs.registry }}"
+
+      - name: Generate tags (bootc)
+        id: bootc-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: "-"
+
+      - name: Generate tags (container-disk)
+        id: disk-tags
+        uses: ./.github/actions/image-tags
+        with:
+          image_prefix: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.DISK_IMAGE }}
+          branch: ${{ needs.prepare.outputs.branch_name }}
+          date: ${{ needs.prepare.outputs.current_date }}
+          version: ${{ needs.prepare.outputs.version_id }}
+          arches: "-"
+
+      # The two images share one primary key: image-tags derives it from the
+      # same branch / date / version inputs.
+      - name: Create and push multi-arch manifests
+        env:
+          IMAGE_PREFIX: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}
+          PRIMARY_KEY: ${{ steps.bootc-tags.outputs.primary_key }}
+          BOOTC_TAGS: ${{ steps.bootc-tags.outputs.tags }}
+          DISK_TAGS: ${{ steps.disk-tags.outputs.tags }}
+        run: |
+          set -euo pipefail
+
+          stitch() {
+            local image="$1" tags="$2"
+            echo "Creating multi-arch manifest for ${image}:${PRIMARY_KEY}"
+            sudo podman manifest create "${image}-manifest"
+            for arch in amd64 arm64; do
+              sudo podman manifest add "${image}-manifest" "docker://${IMAGE_PREFIX}/${image}:${PRIMARY_KEY}-${arch}"
+            done
+            for tag in $(echo "$tags" | tr ',' ' '); do
+              echo "Pushing manifest as: ${tag}"
+              sudo podman manifest push "${image}-manifest" "docker://${tag}"
+            done
+            sudo podman manifest rm "${image}-manifest"
+          }
+
+          stitch "$IMAGE" "$BOOTC_TAGS"
+          stitch "$DISK_IMAGE" "$DISK_TAGS"
+
+      - name: Sign multi-arch manifests (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: "${{ steps.bootc-tags.outputs.tags }},${{ steps.disk-tags.outputs.tags }}"
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
