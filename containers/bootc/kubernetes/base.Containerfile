@@ -70,6 +70,7 @@ COPY --from=kubeadm-downloader /opt/bin/kubeadm /usr/bin/kubeadm
 # absolute path; only the CLI needs to be on PATH
 COPY --from=kata /opt/kata /opt/kata
 COPY overlay.d/20-kata/ /
+RUN semodule -i /usr/share/selinux/packages/kata-vmm.cil
 RUN ln -s /opt/kata/bin/kata-runtime /usr/bin/kata-runtime && \
     command -v kata-runtime
 RUN systemctl enable tuned && \

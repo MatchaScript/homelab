@@ -1,0 +1,13 @@
+; The kata VMM (cloud-hypervisor) runs as container_kvm_t and opens the disks
+; of a pod itself, from the host.
+;
+; A volumeMode: Block PVC reaches it as the host's device node, which is
+; fixed_disk_device_t. Without this rule the VMM gets EACCES and the container
+; is never created. The type covers every fixed disk on the host; which path
+; the VMM opens is chosen by the kata runtime, never by the guest.
+(allow container_kvm_t fixed_disk_device_t (blk_file (getattr ioctl lock open read write)))
+
+; cloud-hypervisor falls back from io_uring to its AIO backend when it cannot
+; create the ring, and the AIO backend has no punch_hole: a discard from the
+; guest then fails, and space the guest frees never returns to the host.
+(allow container_kvm_t io_uring_t (anon_inode (create map read write)))
