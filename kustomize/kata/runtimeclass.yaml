@@ -3,3 +3,17 @@ kind: RuntimeClass
 metadata:
   name: kata
 handler: kata-clh
+# kata sizes the guest as the container limits plus overhead_vcpus and
+# overhead_memory, and kubelet puts cloud-hypervisor in a pod cgroup of the
+# container limits plus podFixed. podFixed therefore covers the guest-side
+# overhead_* and the host-side footprint of the shim, cloud-hypervisor and
+# virtiofsd. Without it the guest outgrows the cgroup and the VM is OOM killed.
+#
+# memory: overhead_memory (32Mi) plus the host-side charge measured at an OOM
+# of a 16Gi guest (about 225Mi: page tables, slab, anon), plus margin. Page
+# tables grow with the guest, so guests larger than 16Gi need more.
+# cpu: kata-deploy's default for clh-runtime-rs.
+overhead:
+  podFixed:
+    memory: 384Mi
+    cpu: 250m

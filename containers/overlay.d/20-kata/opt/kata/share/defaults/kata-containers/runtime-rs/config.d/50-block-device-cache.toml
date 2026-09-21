@@ -1,0 +1,6 @@
+# Block devices reach the hypervisor with O_DIRECT. Buffered writes to the
+# backing device fill the host page cache, which is charged to the pod cgroup
+# that also holds the guest RAM, and grows into whatever headroom
+# RuntimeClass overhead.podFixed leaves.
+[hypervisor.clh]
+block_device_cache_direct = true
