@@ -12,7 +12,7 @@ spec:
     - alert: "KubeSchedulerDown"
       annotations:
         description: "KubeScheduler has disappeared from Prometheus target discovery."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerdown"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerdown"
         summary: "Target disappeared from Prometheus target discovery."
       expr: |
         absent(up{job="kube-scheduler"})
@@ -22,7 +22,7 @@ spec:
     - alert: "KubeSchedulerInstanceUnreachable"
       annotations:
         description: "A KubeScheduler instance has been unreachable for more than 15 minutes."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerinstanceunreachable"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeschedulerinstanceunreachable"
         summary: "KubeScheduler instance is unreachable."
       expr: |
         up{job="kube-scheduler"} == 0
