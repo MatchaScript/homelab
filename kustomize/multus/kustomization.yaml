@@ -19,6 +19,10 @@ images:
 # volumeMounts merge by mountPath, so the upstream /opt/cni/bin mount of the
 # same volume stays beside the new one (same host directory mounted twice
 # inside the pod; harmless).
+# The thick daemon runs the delegate plugins (cilium-cni) inside its own
+# cgroup. Under upstream's 100m / 50Mi limits a burst of pod creations, such
+# as the evictions from a node reboot, keeps each CNI ADD past the CRI-O
+# deadline and the node never catches up.
 patches:
   - target:
       kind: ConfigMap
@@ -52,6 +56,10 @@ patches:
           spec:
             containers:
               - name: kube-multus
+                resources:
+                  limits:
+                    cpu: null
+                    memory: 512Mi
                 volumeMounts:
                   - name: cnibin
                     mountPath: /var/lib/cni/bin
