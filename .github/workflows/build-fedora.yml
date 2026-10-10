@@ -16,6 +16,7 @@ on:
           - default
           - minimal
           - micro
+          - sysroot
       push_images:
         description: "Push images to registry"
         required: true
@@ -106,7 +107,7 @@ jobs:
         run: |
           BUILD_TYPE="${{ inputs.build_type }}"
           if [ -z "$BUILD_TYPE" ] || [ "$BUILD_TYPE" = "all" ]; then
-            VARIANTS='["default","minimal","micro"]'
+            VARIANTS='["default","minimal","micro","sysroot"]'
           else
             VARIANTS="[\"$BUILD_TYPE\"]"
           fi
