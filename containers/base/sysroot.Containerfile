@@ -9,7 +9,8 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     glibc-devel \
     kernel-headers \
     libgcc \
-    libstdc++-devel;
+    libstdc++-devel \
+    libstdc++-static;
 RUN dnf --installroot /mnt/sys-root clean all; \
     rm -rf /mnt/sys-root/var /mnt/sys-root/usr/lib/sysimage /mnt/sys-root/usr/share/locale
 

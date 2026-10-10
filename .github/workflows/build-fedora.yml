@@ -291,3 +291,38 @@ jobs:
           registry: ${{ needs.prepare.outputs.registry }}
           registry_username: ${{ github.actor }}
           registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ════════════════════════════════════════════════════
+  #  Sysroot tarballs for Bazel
+  # ════════════════════════════════════════════════════
+  sysroot-release:
+    name: Release Sysroot Tarballs
+    runs-on: ubuntu-26.04
+    needs: [prepare, manifest]
+    if: ${{ contains(fromJSON(needs.prepare.outputs.variants), 'sysroot') && needs.prepare.outputs.branch_name == 'main' }}
+    permissions:
+      contents: write
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+      VERSION: ${{ needs.prepare.outputs.version_id }}.${{ needs.prepare.outputs.current_date }}
+    steps:
+      - name: Export the sysroot images
+        run: |
+          for ARCH in amd64 arm64; do
+            REF="${REGISTRY}/${IMAGE_NAME}:${VERSION}-sysroot-${ARCH}"
+            docker pull --platform "linux/${ARCH}" "$REF"
+            CID=$(docker create --platform "linux/${ARCH}" "$REF" /)
+            docker export "$CID" | xz -T0 > "fedora-sysroot-${VERSION}-${ARCH}.tar.xz"
+            docker rm "$CID"
+          done
+          sha256sum fedora-sysroot-*.tar.xz | tee SHA256SUMS
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "fedora-sysroot-${VERSION}" \
+            --repo "${{ github.repository }}" \
+            --title "fedora-sysroot ${VERSION}" \
+            --notes "Sysroot of ${REGISTRY}/${IMAGE_NAME}:${VERSION}-sysroot, as tarballs for Bazel." \
+            fedora-sysroot-*.tar.xz SHA256SUMS
