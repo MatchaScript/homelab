@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/containerd/nri//contrib/kustomize/device-injector/base?ref=v0.12.3
+
+# The base leaves the image at :latest; pin the release and set the pull
+# policy as upstream's components/image-stable does.
+images:
+  - name: ghcr.io/containerd/nri/plugins/device-injector
+    newTag: v0.12.3
+
+patches:
+  - target:
+      kind: DaemonSet
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
