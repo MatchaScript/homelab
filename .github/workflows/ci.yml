@@ -234,6 +234,7 @@ jobs:
         with:
           cluster_name: ${{ matrix.chart }}-test
           node_image: kindest/node:v1.34.3
+          config: charts/kind.yaml
           wait: 120s
 
       - name: Install Cosign

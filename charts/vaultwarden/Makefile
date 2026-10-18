@@ -30,7 +30,7 @@ test: test-up
 
 test-up:
 	@if ! kind get clusters 2>/dev/null | grep -qx $(KIND_CLUSTER); then \
-	  kind create cluster --name $(KIND_CLUSTER) --image $(KIND_NODE_IMAGE); \
+	  kind create cluster --name $(KIND_CLUSTER) --image $(KIND_NODE_IMAGE) --config ../kind.yaml; \
 	fi
 
 test-down:
