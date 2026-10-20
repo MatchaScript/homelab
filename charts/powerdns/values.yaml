@@ -14,7 +14,7 @@ image:
 initContainer:
   image:
     repository: ghcr.io/matchascript/fedora
-    tag: "micro@sha256:ccff476bcbc8890e5ef14b8f6e18135370c8151a91102c3297500ec565266c86"
+    tag: "micro@sha256:d114ab274f7082135bc5d7477bda3c366b3546a9af33991577ba91cebd4995c0"
     pullPolicy: IfNotPresent
 
 # Image used by the init container that waits for the database TCP port to open.
