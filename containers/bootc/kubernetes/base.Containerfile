@@ -57,6 +57,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     btrfs-progs \
     lvm2 \
     systemd-networkd \
+    ipmitool \
     fastfetch \
     systemd-resolved \
     greenboot \
