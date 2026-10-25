@@ -152,7 +152,7 @@ jobs:
           podman run --rm --entrypoint /bin/sh "${IMAGE}" -c '
             set -e
             yanglint --version
-            test -e /usr/lib64/librados.so.2
+            test -e /usr/lib64/librados.so
           '
 
       - name: Push to Registry

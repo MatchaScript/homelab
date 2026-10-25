@@ -4,7 +4,7 @@ FROM ${BASE_IMAGE}
 
 RUN --mount=type=cache,target=/var/cache/dnf \
     dnf install -y --setopt install_weak_deps=false \
-    librados2 \
+    librados-devel \
     libyang-tools \
     && dnf clean all
 
