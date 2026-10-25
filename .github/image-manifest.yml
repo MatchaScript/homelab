@@ -97,3 +97,11 @@
   pin_env_key: FEDORA_BASE
   containerfile: containers/gha-runner/base.Containerfile
   build_arg: BASE_IMAGE
+
+- key: builder-on-fedora
+  watch_paths:
+    - .github/workflows/build-builder.yml
+  pin_source: .github/workflows/build-builder.yml
+  pin_env_key: BASE_IMAGE
+  containerfile: containers/builder/Containerfile
+  build_arg: BASE_IMAGE

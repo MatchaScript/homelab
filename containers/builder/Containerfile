@@ -1,0 +1,16 @@
+ARG BASE_IMAGE
+
+FROM ${BASE_IMAGE}
+
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf install -y --setopt install_weak_deps=false \
+    librados2 \
+    libyang-tools \
+    && dnf clean all
+
+LABEL org.opencontainers.image.title="builder"
+LABEL org.opencontainers.image.description="Builder image for the remote Bazel runner: the fedora base plus the tools the tests need"
+LABEL org.opencontainers.image.source="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.url="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.documentation="https://github.com/MatchaScript/homelab"
+LABEL org.opencontainers.image.vendor="MatchaScript"

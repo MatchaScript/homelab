@@ -1,0 +1,228 @@
+name: Build Builder Image
+
+on:
+  schedule:
+    # 毎週日曜日 午前2時(UTC) = 11時(JST)
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      push_images:
+        description: "Push images to registry"
+        required: true
+        default: false
+        type: boolean
+      target_registry:
+        description: "Target registry (override default)"
+        required: false
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: matchascript
+  IMAGE: builder
+  # renovate: datasource=docker depName=ghcr.io/matchascript/fedora
+  BASE_IMAGE: "ghcr.io/matchascript/fedora:minimal"
+  CONTEXT_DIR: ./containers
+
+jobs:
+  # ════════════════════════════════════════════════════
+  #  Prepare
+  # ════════════════════════════════════════════════════
+  prepare:
+    name: Prepare Build Environment
+    runs-on: ubuntu-slim
+    outputs:
+      current_date: ${{ steps.set_date.outputs.current_date }}
+      branch_name: ${{ steps.set_branch.outputs.branch_name }}
+      registry: ${{ steps.set_registry.outputs.registry }}
+      can_push: ${{ steps.set_push.outputs.can_push }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set current date
+        id: set_date
+        env:
+          TZ: "Asia/Tokyo"
+        run: echo "current_date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Set branch name
+        id: set_branch
+        run: |
+          # Sanitize branch name for use as OCI tag (replace '/' with '-')
+          BRANCH_NAME="${{ github.ref_name }}"
+          BRANCH_NAME="${BRANCH_NAME//\//-}"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Current branch: $BRANCH_NAME"
+
+      - name: Set registry
+        id: set_registry
+        run: |
+          REGISTRY="${{ inputs.target_registry || env.REGISTRY }}"
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+
+      - name: Set push permission
+        id: set_push
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "devel" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ════════════════════════════════════════════════════
+  #  Build — amd64 / arm64
+  # ════════════════════════════════════════════════════
+  build:
+    name: Build Builder (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Generate Tags
+        id: tags
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+          ARCH: ${{ matrix.arch }}
+          IMAGE_PREFIX: ${{ needs.prepare.outputs.registry }}/${{ env.NAMESPACE }}/${{ env.IMAGE }}
+        run: |
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAGS="${DATE_TAG}-${ARCH} latest-${ARCH}"
+          else
+            TAGS="${DATE_TAG}-${BRANCH_NAME}-${ARCH} ${BRANCH_NAME}-${ARCH}"
+          fi
+
+          REFS=()
+          for t in $TAGS; do
+            REFS+=("${IMAGE_PREFIX}:${t}")
+          done
+
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          (IFS=,; echo "refs=${REFS[*]}") >> "$GITHUB_OUTPUT"
+          echo "Generated tags: $TAGS"
+
+      - name: Generate OCI labels
+        id: labels
+        uses: ./.github/actions/oci-labels
+        with:
+          title: ${{ env.IMAGE }}
+          description: "Builder image for the remote Bazel runner: the fedora base plus the tools the tests need"
+          version: ${{ needs.prepare.outputs.current_date }}
+          base_name: ${{ env.BASE_IMAGE }}
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@719e3c40d8af9790c23eca13f7daa339f2867034 # v3
+        with:
+          context: ${{ env.CONTEXT_DIR }}
+          containerfiles: ${{ env.CONTEXT_DIR }}/builder/Containerfile
+          image: ${{ env.NAMESPACE }}/${{ env.IMAGE }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: ${{ steps.labels.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ env.BASE_IMAGE }}
+
+      - name: Test image
+        env:
+          IMAGE: ${{ steps.build_image.outputs.image-with-tag }}
+        run: |
+          echo "Testing image: ${IMAGE}"
+          podman run --rm --entrypoint /bin/sh "${IMAGE}" -c '
+            set -e
+            yanglint --version
+            test -e /usr/lib64/librados.so.2
+          '
+
+      - name: Push to Registry
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3
+        with:
+          image: ${{ steps.build_image.outputs.image }}
+          tags: ${{ steps.build_image.outputs.tags }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sign pushed images (cosign keyless)
+        if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.tags.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Multi-arch manifest ───────────────────────────────
+  manifest:
+    name: Create Manifest
+    runs-on: ubuntu-26.04
+    needs: [prepare, build]
+    if: ${{ (inputs.push_images == true || github.event_name == 'schedule') && needs.prepare.outputs.can_push == 'true' }}
+    env:
+      REGISTRY: ${{ needs.prepare.outputs.registry }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install buildah
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y buildah
+
+      - name: Login to Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | buildah login -u "${{ github.actor }}" --password-stdin "$REGISTRY"
+
+      - name: Create and Push Manifest Lists
+        id: manifest_push
+        env:
+          DATE_TAG: ${{ needs.prepare.outputs.current_date }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.branch_name }}
+        run: |
+          REPO="${REGISTRY}/${NAMESPACE}/${IMAGE}"
+
+          if [ "$BRANCH_NAME" = "main" ]; then
+            MANIFEST_TAGS="${DATE_TAG} latest"
+          else
+            MANIFEST_TAGS="${DATE_TAG}-${BRANCH_NAME} ${BRANCH_NAME}"
+          fi
+
+          PUSHED_REFS=()
+          for TAG in $MANIFEST_TAGS; do
+            echo "==> Creating manifest: ${REPO}:${TAG}"
+            buildah manifest create "${REPO}:${TAG}" \
+              "${REPO}:${TAG}-amd64" "${REPO}:${TAG}-arm64"
+            buildah manifest push --all "${REPO}:${TAG}" "docker://${REPO}:${TAG}"
+            PUSHED_REFS+=("${REPO}:${TAG}")
+          done
+
+          (IFS=,; echo "refs=${PUSHED_REFS[*]}") >> "$GITHUB_OUTPUT"
+
+      - name: Sign multi-arch manifest (cosign keyless)
+        uses: ./.github/actions/cosign-sign
+        with:
+          references: ${{ steps.manifest_push.outputs.refs }}
+          registry: ${{ needs.prepare.outputs.registry }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
