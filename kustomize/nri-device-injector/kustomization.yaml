@@ -17,3 +17,10 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/imagePullPolicy
         value: IfNotPresent
+      # containerd labels the NRI socket container_var_run_t, which
+      # container_t may not write to, so the plugin cannot connect. spc_t is
+      # the type for node-level containers that talk to the runtime's sockets.
+      - op: add
+        path: /spec/template/spec/containers/0/securityContext/seLinuxOptions
+        value:
+          type: spc_t
