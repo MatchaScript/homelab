@@ -8,7 +8,7 @@
           "subdir": "monitoring/ceph-mixin"
         }
       },
-      "version": "cb76fd5ba4263a0f64e2e9feb8f34f8a9e495538",
+      "version": "5759603771bdb3054d6b660f64cf9dfc7c69bc2f",
       "sum": "ufVgGNSYLzuaS9DmMYVbQ9ZkYypir7YzWCiYUrGDSwc="
     },
     {
@@ -28,7 +28,7 @@
           "subdir": "gen/grafonnet-latest"
         }
       },
-      "version": "41e6bfcbe4ef1054298ffff8664f1354c897dd2d",
+      "version": "8de2f3c83a38f68085c239df979f57d8dfdb7588",
       "sum": "djejYCGNdtWsAd39+cHU1QNBIUKePhUyY4QNZt7XO4o="
     },
     {
@@ -38,7 +38,7 @@
           "subdir": "gen/grafonnet-v13.0.0"
         }
       },
-      "version": "41e6bfcbe4ef1054298ffff8664f1354c897dd2d",
+      "version": "8de2f3c83a38f68085c239df979f57d8dfdb7588",
       "sum": "hZfIVja9O6czp3Pg8fzqmN891FLz8nPvy2IJND5qlGw="
     },
     {
@@ -68,8 +68,8 @@
           "subdir": ""
         }
       },
-      "version": "c0f8aed884ba2408900a41a47d3cd72ec1a4c599",
-      "sum": "CrDkmdqqO/lUkeSZQR2iCsAiMmi34PIg1v18DP4aJoQ="
+      "version": "2002557eb82c0795cb03f01ba15245786f55c0db",
+      "sum": "5/6PAqtl7igOLOVtTT4Js330yHdaLNBKDfo7Ez+dk38="
     },
     {
       "source": {
@@ -78,7 +78,7 @@
           "subdir": "docs/node-mixin"
         }
       },
-      "version": "17ddd77c59ba27e1508e9f7894b1e55b44d6aed3",
+      "version": "8b576ba992d5ccfe0012f889138b9c8a594f91a7",
       "sum": "PGx1okd1Ny4U+Ma3AV0haZWvXnX8eJBN4+BsQInWUo4="
     }
   ],

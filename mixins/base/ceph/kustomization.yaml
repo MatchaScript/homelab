@@ -93,6 +93,12 @@ configMapGenerator:
     options:
       annotations:
         grafana_folder: Ceph
+  - name: ceph-mixin-dashboard-rgw-s3-analytics-users-buckets
+    files:
+      - dashboards/rgw-s3-analytics-users-buckets.json
+    options:
+      annotations:
+        grafana_folder: Ceph
   - name: ceph-mixin-dashboard-rgw-s3-analytics
     files:
       - dashboards/rgw-s3-analytics.json

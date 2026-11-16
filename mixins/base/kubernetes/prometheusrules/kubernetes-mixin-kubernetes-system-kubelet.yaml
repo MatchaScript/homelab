@@ -12,7 +12,7 @@ spec:
     - alert: "KubeNodeNotReady"
       annotations:
         description: "{{ $labels.node }} has been unready for more than 15 minutes on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodenotready"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodenotready"
         summary: "Node is not ready."
       expr: |
         kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
@@ -24,7 +24,7 @@ spec:
     - alert: "KubeNodePressure"
       annotations:
         description: "{{ $labels.node }} on cluster {{ $labels.cluster }} has active Condition {{ $labels.condition }}. This is caused by resource usage exceeding eviction thresholds."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodepressure"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodepressure"
         summary: "Node has as active Condition."
       expr: |
         kube_node_status_condition{job="kube-state-metrics",condition=~"(MemoryPressure|DiskPressure|PIDPressure)",status="true"} == 1
@@ -36,7 +36,7 @@ spec:
     - alert: "KubeNodeUnreachable"
       annotations:
         description: "{{ $labels.node }} is unreachable and some workloads may be rescheduled on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodeunreachable"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodeunreachable"
         summary: "Node is unreachable."
       expr: |
         (kube_node_spec_taint{job="kube-state-metrics",key="node.kubernetes.io/unreachable",effect="NoSchedule"} unless ignoring(key,value) kube_node_spec_taint{job="kube-state-metrics",key=~"ToBeDeletedByClusterAutoscaler|cloud.google.com/impending-node-termination|aws-node-termination-handler/spot-itn"}) == 1
@@ -46,7 +46,7 @@ spec:
     - alert: "KubeletTooManyPods"
       annotations:
         description: "Kubelet '{{ $labels.node }}' is running at {{ $value | humanizePercentage }} of its Pod capacity on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubelettoomanypods"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubelettoomanypods"
         summary: "Kubelet is running at capacity."
       expr: |
         (
@@ -68,7 +68,7 @@ spec:
     - alert: "KubeNodeReadinessFlapping"
       annotations:
         description: "The readiness status of node {{ $labels.node }} has changed {{ $value }} times in the last 15 minutes on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodereadinessflapping"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodereadinessflapping"
         summary: "Node readiness status is flapping."
       expr: |
         sum(changes(kube_node_status_condition{job="kube-state-metrics",status="true",condition="Ready"}[15m])) by (cluster, node) > 2
@@ -80,7 +80,7 @@ spec:
     - alert: "KubeNodeEviction"
       annotations:
         description: "Node {{ $labels.node }} on {{ $labels.cluster }} is evicting Pods due to {{ $labels.eviction_signal }}.  Eviction occurs when eviction thresholds are crossed, typically caused by Pods exceeding RAM/ephemeral-storage limits."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodeeviction"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodeeviction"
         summary: "Node is evicting pods."
       expr: |
         sum(rate(kubelet_evictions{job="kubelet", metrics_path="/metrics"}[15m])) by(cluster, eviction_signal, instance)
@@ -95,7 +95,7 @@ spec:
     - alert: "KubeletPlegDurationHigh"
       annotations:
         description: "The Kubelet Pod Lifecycle Event Generator has a 99th percentile duration of {{ $value }} seconds on node {{ $labels.node }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletplegdurationhigh"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletplegdurationhigh"
         summary: "Kubelet Pod Lifecycle Event Generator is taking too long to relist."
       expr: |
         node_quantile:kubelet_pleg_relist_duration_seconds:histogram_quantile{quantile="0.99"} >= 10
@@ -105,7 +105,7 @@ spec:
     - alert: "KubeletPodStartUpLatencyHigh"
       annotations:
         description: "Kubelet Pod startup 99th percentile latency is {{ $value }} seconds on node {{ $labels.node }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletpodstartuplatencyhigh"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletpodstartuplatencyhigh"
         summary: "Kubelet Pod startup latency is too high."
       expr: |
         histogram_quantile(0.99,
@@ -126,7 +126,7 @@ spec:
     - alert: "KubeletClientCertificateExpiration"
       annotations:
         description: "Client certificate for Kubelet on node {{ $labels.node }} expires in {{ $value | humanizeDuration }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificateexpiration"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificateexpiration"
         summary: "Kubelet client certificate is about to expire."
       expr: |
         kubelet_certificate_manager_client_ttl_seconds < 604800
@@ -135,7 +135,7 @@ spec:
     - alert: "KubeletClientCertificateExpiration"
       annotations:
         description: "Client certificate for Kubelet on node {{ $labels.node }} expires in {{ $value | humanizeDuration }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificateexpiration"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificateexpiration"
         summary: "Kubelet client certificate is about to expire."
       expr: |
         kubelet_certificate_manager_client_ttl_seconds < 86400
@@ -144,7 +144,7 @@ spec:
     - alert: "KubeletServerCertificateExpiration"
       annotations:
         description: "Server certificate for Kubelet on node {{ $labels.node }} expires in {{ $value | humanizeDuration }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificateexpiration"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificateexpiration"
         summary: "Kubelet server certificate is about to expire."
       expr: |
         kubelet_certificate_manager_server_ttl_seconds < 604800
@@ -153,7 +153,7 @@ spec:
     - alert: "KubeletServerCertificateExpiration"
       annotations:
         description: "Server certificate for Kubelet on node {{ $labels.node }} expires in {{ $value | humanizeDuration }} on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificateexpiration"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificateexpiration"
         summary: "Kubelet server certificate is about to expire."
       expr: |
         kubelet_certificate_manager_server_ttl_seconds < 86400
@@ -162,7 +162,7 @@ spec:
     - alert: "KubeletClientCertificateRenewalErrors"
       annotations:
         description: "Kubelet on node {{ $labels.node }} has failed to renew its client certificate ({{ $value | humanize }} errors in the last 5 minutes) on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificaterenewalerrors"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletclientcertificaterenewalerrors"
         summary: "Kubelet has failed to renew its client certificate."
       expr: |
         increase(kubelet_certificate_manager_client_expiration_renew_errors[5m]) > 0
@@ -172,7 +172,7 @@ spec:
     - alert: "KubeletServerCertificateRenewalErrors"
       annotations:
         description: "Kubelet on node {{ $labels.node }} has failed to renew its server certificate ({{ $value | humanize }} errors in the last 5 minutes) on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificaterenewalerrors"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletservercertificaterenewalerrors"
         summary: "Kubelet has failed to renew its server certificate."
       expr: |
         increase(kubelet_server_expiration_renew_errors[5m]) > 0
@@ -182,7 +182,7 @@ spec:
     - alert: "KubeletInstanceUnreachable"
       annotations:
         description: "A Kubelet instance has been unreachable for more than 15 minutes."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletinstanceunreachable"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletinstanceunreachable"
         summary: "Kubelet instance is unreachable."
       expr: |
         up{job="kubelet", metrics_path="/metrics"} == 0
@@ -192,7 +192,7 @@ spec:
     - alert: "KubeletDown"
       annotations:
         description: "Kubelet has disappeared from Prometheus target discovery on cluster {{ $labels.cluster }}."
-        runbook_url: "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletdown"
+        runbook_url: "https://github.com/kubernetes-sigs/kubernetes-mixin/tree/master/runbook.md#alert-name-kubeletdown"
         summary: "Target disappeared from Prometheus target discovery."
       expr: |
         count by (cluster) (kube_node_info{job="kube-state-metrics"})
